@@ -1,8 +1,5 @@
-node_modules
-.cache
+.temp/
+.rn_temp/
+node_modules/
 .DS_Store
-lerna-debug.log
 yarn-error.log
-_book
-.idea
-.vscode

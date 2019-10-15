@@ -93,7 +93,7 @@ function permanentlyNotSupport (apiName) {
   }
 }
 
-const VALID_COLOR_REG = /^#\d{6}$/
+const VALID_COLOR_REG = /^#[0-9a-fA-F]{6}$/
 
 const isValidColor = (color) => {
   return VALID_COLOR_REG.test(color)
@@ -115,8 +115,11 @@ const createCallbackManager = () => {
    * @param {{ callback: function, ctx: any } | function} opt
    */
   const remove = (opt) => {
-    const pos = callbacks.findIndex(callback => {
-      return callback === opt
+    let pos = -1
+    callbacks.forEach((callback, k) => {
+      if (callback === opt) {
+        pos = k
+      }
     })
     if (pos > -1) {
       callbacks.splice(pos, 1)
@@ -169,9 +172,11 @@ const createScroller = () => {
 
   const listen = callback => {
     el.addEventListener('scroll', callback)
+    document.body.addEventListener('touchmove', callback)
   }
   const unlisten = callback => {
     el.removeEventListener('scroll', callback)
+    document.body.removeEventListener('touchmove', callback)
   }
 
   const isReachBottom = (distance = 0) => {

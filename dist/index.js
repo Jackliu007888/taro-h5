@@ -4,7 +4,8 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
 
-var Nerv = _interopDefault(require('nervjs'));
+var Nerv = require('nervjs');
+var Nerv__default = _interopDefault(Nerv);
 
 function _typeof(obj) {
   if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") {
@@ -172,8 +173,24 @@ function _slicedToArray(arr, i) {
   return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _nonIterableRest();
 }
 
+function _toConsumableArray(arr) {
+  return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _nonIterableSpread();
+}
+
+function _arrayWithoutHoles(arr) {
+  if (Array.isArray(arr)) {
+    for (var i = 0, arr2 = new Array(arr.length); i < arr.length; i++) arr2[i] = arr[i];
+
+    return arr2;
+  }
+}
+
 function _arrayWithHoles(arr) {
   if (Array.isArray(arr)) return arr;
+}
+
+function _iterableToArray(iter) {
+  if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter);
 }
 
 function _iterableToArrayLimit(arr, i) {
@@ -206,6 +223,10 @@ function _iterableToArrayLimit(arr, i) {
   return _arr;
 }
 
+function _nonIterableSpread() {
+  throw new TypeError("Invalid attempt to spread non-iterable instance");
+}
+
 function _nonIterableRest() {
   throw new TypeError("Invalid attempt to destructure non-iterable instance");
 }
@@ -236,6 +257,76 @@ if (typeof Object.assign !== 'function') {
     }
 
     return to;
+  };
+}
+
+if (typeof Object.defineProperties !== 'function') {
+  Object.defineProperties = function (obj, properties) {
+    function convertToDescriptor(desc) {
+      function hasProperty(obj, prop) {
+        return Object.prototype.hasOwnProperty.call(obj, prop);
+      }
+
+      function isCallable(v) {
+        // NB: modify as necessary if other values than functions are callable.
+        return typeof v === 'function';
+      }
+
+      if (_typeof(desc) !== 'object' || desc === null) {
+        throw new TypeError('bad desc');
+      }
+
+      var d = {};
+      if (hasProperty(desc, 'enumerable')) d.enumerable = !!desc.enumerable;
+
+      if (hasProperty(desc, 'configurable')) {
+        d.configurable = !!desc.configurable;
+      }
+
+      if (hasProperty(desc, 'value')) d.value = desc.value;
+      if (hasProperty(desc, 'writable')) d.writable = !!desc.writable;
+
+      if (hasProperty(desc, 'get')) {
+        var g = desc.get;
+
+        if (!isCallable(g) && typeof g !== 'undefined') {
+          throw new TypeError('bad get');
+        }
+
+        d.get = g;
+      }
+
+      if (hasProperty(desc, 'set')) {
+        var s = desc.set;
+
+        if (!isCallable(s) && typeof s !== 'undefined') {
+          throw new TypeError('bad set');
+        }
+
+        d.set = s;
+      }
+
+      if (('get' in d || 'set' in d) && ('value' in d || 'writable' in d)) {
+        throw new TypeError('identity-confused descriptor');
+      }
+
+      return d;
+    }
+
+    if (_typeof(obj) !== 'object' || obj === null) throw new TypeError('bad obj');
+    properties = Object(properties);
+    var keys = Object.keys(properties);
+    var descs = [];
+
+    for (var i = 0; i < keys.length; i++) {
+      descs.push([keys[i], convertToDescriptor(properties[keys[i]])]);
+    }
+
+    for (var i = 0; i < descs.length; i++) {
+      Object.defineProperty(obj, descs[i][0], descs[i][1]);
+    }
+
+    return obj;
   };
 }
 
@@ -1366,9 +1457,14 @@ var ENV_TYPE = {
   RN: 'RN',
   SWAN: 'SWAN',
   ALIPAY: 'ALIPAY',
-  TT: 'TT'
+  TT: 'TT',
+  QQ: 'QQ'
 };
 function getEnv() {
+  if (typeof qq !== 'undefined' && qq.getSystemInfo) {
+    return ENV_TYPE.QQ;
+  }
+
   if (typeof tt !== 'undefined' && tt.getSystemInfo) {
     return ENV_TYPE.TT;
   }
@@ -1551,9 +1647,12 @@ function () {
 
       var nextChain = this._getNextChain();
 
-      return nextInterceptor(nextChain)["catch"](function (err) {
+      var p = nextInterceptor(nextChain);
+      var res = p["catch"](function (err) {
         return Promise.reject(err);
       });
+      if (typeof p.abort === 'function') res.abort = p.abort;
+      return res;
     }
   }, {
     key: "_getNextInterceptor",
@@ -1590,6 +1689,11 @@ function () {
     key: "addInterceptor",
     value: function addInterceptor(interceptor) {
       this.chain.interceptors.push(interceptor);
+    }
+  }, {
+    key: "cleanInterceptors",
+    value: function cleanInterceptors() {
+      this.chain = new Chain();
     }
   }]);
 
@@ -1644,6 +1748,8 @@ function initPxTransform(config) {
   this.config.designWidth = designWidth;
   this.config.deviceRatio = deviceRatio;
 }
+
+var defer = typeof Promise === 'function' ? Promise.prototype.then.bind(Promise.resolve()) : setTimeout;
 
 /* eslint-disable camelcase */
 var eventCenter = new Events();
@@ -1762,7 +1868,7 @@ function permanentlyNotSupport(apiName) {
   };
 }
 
-var VALID_COLOR_REG = /^#\d{6}$/;
+var VALID_COLOR_REG = /^#[0-9a-fA-F]{6}$/;
 
 var isValidColor = function isValidColor(color) {
   return VALID_COLOR_REG.test(color);
@@ -1785,8 +1891,11 @@ var createCallbackManager = function createCallbackManager() {
 
 
   var remove = function remove(opt) {
-    var pos = callbacks.findIndex(function (callback) {
-      return callback === opt;
+    var pos = -1;
+    callbacks.forEach(function (callback, k) {
+      if (callback === opt) {
+        pos = k;
+      }
     });
 
     if (pos > -1) {
@@ -1852,10 +1961,12 @@ var createScroller = function createScroller() {
 
   var listen = function listen(callback) {
     el.addEventListener('scroll', callback);
+    document.body.addEventListener('touchmove', callback);
   };
 
   var unlisten = function unlisten(callback) {
     el.removeEventListener('scroll', callback);
+    document.body.removeEventListener('touchmove', callback);
   };
 
   var isReachBottom = function isReachBottom() {
@@ -1933,7 +2044,39 @@ var taro = {
   eventCenter: eventCenter,
   render: render,
   internal_safe_set: set,
-  internal_safe_get: get
+  internal_safe_get: get,
+  Children: Nerv.Children,
+  createElement: Nerv.createElement,
+  cloneElement: Nerv.cloneElement,
+  nextTick: Nerv.nextTick,
+  options: Nerv.options,
+  findDOMNode: Nerv.findDOMNode,
+  isValidElement: Nerv.isValidElement,
+  unmountComponentAtNode: Nerv.unmountComponentAtNode,
+  createPortal: Nerv.createPortal,
+
+  /* eslint-disable-next-line camelcase */
+  unstable_renderSubtreeIntoContainer: Nerv.unstable_renderSubtreeIntoContainer,
+  hydrate: Nerv.hydrate,
+  createFactory: Nerv.createFactory,
+
+  /* eslint-disable-next-line camelcase */
+  unstable_batchedUpdates: Nerv.unstable_batchedUpdates,
+  version: Nerv.version,
+  PropTypes: Nerv.PropTypes,
+  createRef: Nerv.createRef,
+  forwardRef: Nerv.forwardRef,
+  memo: Nerv.memo,
+  createContext: Nerv.createContext,
+  useEffect: Nerv.useEffect,
+  useLayoutEffect: Nerv.useLayoutEffect,
+  useReducer: Nerv.useReducer,
+  useState: Nerv.useState,
+  useRef: Nerv.useRef,
+  useCallback: Nerv.useCallback,
+  useMemo: Nerv.useMemo,
+  useImperativeHandle: Nerv.useImperativeHandle,
+  useContext: Nerv.useContext
 };
 
 var Component =
@@ -1963,10 +2106,18 @@ function (_Nerv$Component) {
     set: function set(app) {
       console.warn('Property "$app" is read-only.');
     }
+  }, {
+    key: "$component",
+    get: function get() {
+      return this;
+    },
+    set: function set(app) {
+      console.warn('Property "$component" is read-only.');
+    }
   }]);
 
   return Component;
-}(Nerv.Component);
+}(Nerv__default.Component);
 
 var PureComponent =
 /*#__PURE__*/
@@ -1995,10 +2146,18 @@ function (_Nerv$PureComponent) {
     set: function set(app) {
       console.warn('Property "$app" is read-only.');
     }
+  }, {
+    key: "$component",
+    get: function get() {
+      return this;
+    },
+    set: function set(app) {
+      console.warn('Property "$component" is read-only.');
+    }
   }]);
 
   return PureComponent;
-}(Nerv.PureComponent);
+}(Nerv__default.PureComponent);
 
 var initPxTransform$1 = initPxTransform.bind(taro);
 var requirePlugin = permanentlyNotSupport('requirePlugin');
@@ -2064,9 +2223,10 @@ taro.interceptors = interceptors;
 var onBackgroundAudioPlay = temporarilyNotSupport('onBackgroundAudioPlay');
 var onBackgroundAudioPause = temporarilyNotSupport('onBackgroundAudioPause');
 var onBackgroundAudioStop = temporarilyNotSupport('onBackgroundAudioStop'); // export const onNetworkStatusChange = temporarilyNotSupport('onNetworkStatusChange')
+// export const onAccelerometerChange = temporarilyNotSupport('onAccelerometerChange')
+// export const onCompassChange = temporarilyNotSupport('onCompassChange')
+// export const onDeviceMotionChange = temporarilyNotSupport('onDeviceMotionChange')
 
-var onAccelerometerChange = temporarilyNotSupport('onAccelerometerChange');
-var onCompassChange = temporarilyNotSupport('onCompassChange');
 var onBluetoothAdapterStateChange = temporarilyNotSupport('onBluetoothAdapterStateChange');
 var onBluetoothDeviceFound = temporarilyNotSupport('onBluetoothDeviceFound');
 var onBLEConnectionStateChange = temporarilyNotSupport('onBLEConnectionStateChange');
@@ -2108,11 +2268,13 @@ var createLivePusherContext = temporarilyNotSupport('createLivePusherContext'); 
 
 var createMapContext = temporarilyNotSupport('createMapContext'); // 设备
 
-var canIUse = temporarilyNotSupport('canIUse');
-var startAccelerometer = temporarilyNotSupport('startAccelerometer');
-var stopAccelerometer = temporarilyNotSupport('stopAccelerometer');
-var startCompass = temporarilyNotSupport('startCompass');
-var stopCompass = temporarilyNotSupport('stopCompass'); // 界面
+var canIUse = temporarilyNotSupport('canIUse'); // export const startAccelerometer = temporarilyNotSupport('startAccelerometer')
+// export const stopAccelerometer = temporarilyNotSupport('stopAccelerometer')
+// export const startCompass = temporarilyNotSupport('startCompass')
+// export const stopCompass = temporarilyNotSupport('stopCompass')
+// export const startDeviceMotionListening = temporarilyNotSupport('startDeviceMotionListening')
+// export const stopDeviceMotionListening = temporarilyNotSupport('stopDeviceMotionListening')
+// 界面
 // export const hideToast = temporarilyNotSupport('hideToast')
 // export const hideLoading = temporarilyNotSupport('hideLoading')
 
@@ -2121,14 +2283,19 @@ var hideNavigationBarLoading = temporarilyNotSupport('hideNavigationBarLoading')
 // export const pageScrollTo = temporarilyNotSupport('pageScrollTo')
 // export const createSelectorQuery = temporarilyNotSupport('createSelectorQuery')
 // export const createCanvasContext = temporarilyNotSupport('createCanvasContext')
+// export const createContext = temporarilyNotSupport('createContext')
 
-var createContext = temporarilyNotSupport('createContext');
 var drawCanvas = temporarilyNotSupport('drawCanvas');
 var hideKeyboard = temporarilyNotSupport('hideKeyboard'); // export const stopPullDownRefresh = temporarilyNotSupport('stopPullDownRefresh')
 
-var createIntersectionObserver = temporarilyNotSupport('createIntersectionObserver');
-var onWindowResize = temporarilyNotSupport('onWindowResize');
-var offWindowResize = temporarilyNotSupport('offWindowResize'); // 拓展接口
+var createIntersectionObserver = temporarilyNotSupport('createIntersectionObserver'); // 自定义组件
+// export const nextTick = temporarilyNotSupport('nextTick')
+// 菜单
+
+var getMenuButtonBoundingClientRect = temporarilyNotSupport('getMenuButtonBoundingClientRect'); // 窗口
+// export const onWindowResize = temporarilyNotSupport('onWindowResize')
+// export const offWindowResize = temporarilyNotSupport('offWindowResize')
+// 拓展接口
 // export const arrayBufferToBase64 = temporarilyNotSupport('arrayBufferToBase64')
 // export const base64ToArrayBuffer = temporarilyNotSupport('base64ToArrayBuffer')
 
@@ -2143,9 +2310,9 @@ var createWorker = temporarilyNotSupport('createWorker'); // otherApis
 // export const closeSocket = temporarilyNotSupport('closeSocket')
 // 媒体
 // export const chooseImage = temporarilyNotSupport('chooseImage')
+// export const previewImage = temporarilyNotSupport('previewImage')
+// export const getImageInfo = temporarilyNotSupport('getImageInfo')
 
-var previewImage = temporarilyNotSupport('previewImage');
-var getImageInfo = temporarilyNotSupport('getImageInfo');
 var saveImageToPhotosAlbum = temporarilyNotSupport('saveImageToPhotosAlbum');
 var startRecord = temporarilyNotSupport('startRecord');
 var playVoice = temporarilyNotSupport('playVoice');
@@ -2206,9 +2373,9 @@ var stopBeaconDiscovery = temporarilyNotSupport('stopBeaconDiscovery');
 var getBeacons = temporarilyNotSupport('getBeacons');
 var setScreenBrightness = temporarilyNotSupport('setScreenBrightness');
 var getScreenBrightness = temporarilyNotSupport('getScreenBrightness');
-var setKeepScreenOn = temporarilyNotSupport('setKeepScreenOn');
-var vibrateLong = temporarilyNotSupport('vibrateLong');
-var vibrateShort = temporarilyNotSupport('vibrateShort');
+var setKeepScreenOn = temporarilyNotSupport('setKeepScreenOn'); // export const vibrateLong = temporarilyNotSupport('vibrateLong')
+// export const vibrateShort = temporarilyNotSupport('vibrateShort')
+
 var addPhoneContact = temporarilyNotSupport('addPhoneContact');
 var getHCEState = temporarilyNotSupport('getHCEState');
 var startHCE = temporarilyNotSupport('startHCE');
@@ -2296,6 +2463,128 @@ var requestPolymerPayment = temporarilyNotSupport('requestPolymerPayment'); // �
 var navigateToSmartProgram = temporarilyNotSupport('navigateToSmartProgram');
 var navigateBackSmartProgram = temporarilyNotSupport('navigateBackSmartProgram');
 var preloadSubPackage = temporarilyNotSupport('preloadSubPackage');
+
+var callbackManager = createCallbackManager();
+var devicemotionListener;
+/**
+ * 停止监听加速度数据。
+ * @param {Object} [object] 参数
+ * @param {function} [object.success] 接口调用成功的回调函数
+ * @param {function} [object.fail] 接口调用失败的回调函数
+ * @param {function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
+var stopAccelerometer = function stopAccelerometer() {
+  var _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+      success = _ref.success,
+      fail = _ref.fail,
+      complete = _ref.complete;
+
+  var res = {};
+
+  try {
+    window.removeEventListener('devicemotion', devicemotionListener, true);
+    res.errMsg = 'stopAccelerometer:ok';
+    return successHandler(success, complete)(res);
+  } catch (e) {
+    res.errMsg = "stopAccelerometer:fail ".concat(e.message);
+    return errorHandler(fail, complete)(res);
+  }
+};
+
+var INTERVALMAP = {
+  game: {
+    interval: 20,
+    frequency: 50
+  },
+  ui: {
+    interval: 60,
+    frequency: 16.67
+  },
+  normal: {
+    interval: 200,
+    frequency: 5
+  }
+};
+
+var getDevicemotionListener = function getDevicemotionListener(interval) {
+  var lock;
+  var timer;
+  return function (evt) {
+    if (lock) return;
+    lock = true;
+    timer && clearTimeout(timer);
+    callbackManager.trigger({
+      x: evt.acceleration.x || 0,
+      y: evt.acceleration.y || 0,
+      z: evt.acceleration.z || 0
+    });
+    timer = setTimeout(function () {
+      lock = false;
+    }, interval);
+  };
+};
+/**
+ * 开始监听加速度数据。
+ * @param {Object} [object] 参数
+ * @param {'game' | 'ui' | 'normal'} [object.interval=normal] 监听加速度数据回调函数的执行频率
+ * game 适用于更新游戏的回调频率，在 20ms/次 左右
+ * ui 适用于更新 UI 的回调频率，在 60ms/次 左右
+ * normal 普通的回调频率，在 200ms/次 左右
+ * @param {function} [object.success]  接口调用成功的回调函数
+ * @param {function} [object.fail]  接口调用失败的回调函数
+ * @param {function} [object.complete]  接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
+
+var startAccelerometer = function startAccelerometer() {
+  var _ref2 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+      _ref2$interval = _ref2.interval,
+      interval = _ref2$interval === void 0 ? 'normal' : _ref2$interval,
+      success = _ref2.success,
+      fail = _ref2.fail,
+      complete = _ref2.complete;
+
+  try {
+    if (window.DeviceMotionEvent) {
+      var intervalObj = INTERVALMAP[interval];
+
+      if (devicemotionListener) {
+        stopAccelerometer();
+      }
+
+      devicemotionListener = getDevicemotionListener(intervalObj.interval);
+      window.addEventListener('devicemotion', devicemotionListener, true);
+    } else {
+      throw new Error('accelerometer is not supported');
+    }
+
+    return successHandler(success, complete)({
+      errMsg: 'startAccelerometer:ok'
+    });
+  } catch (e) {
+    return errorHandler(fail, complete)({
+      errMsg: "startAccelerometer:fail ".concat(e.message)
+    });
+  }
+};
+/**
+ * 加速度数据事件的回调函数的参数
+ * @typedef {object} AccelerometerParam
+ * @property {number} x X 轴
+ * @property {number} y Y 轴
+ * @property {number} z Z 轴
+ */
+
+/**
+ * 监听加速度数据事件。频率根据 wx.startAccelerometer() 的 interval 参数。可使用 wx.stopAccelerometer() 停止监听。
+ * @param {(res: AccelerometerParam) => void} callback 加速度数据事件的回调函数
+ */
+
+
+var onAccelerometerChange = function onAccelerometerChange(callback) {
+  callbackManager.add(callback);
+};
 
 /**
  * @typedef {object} InnerAudioContext
@@ -2514,12 +2803,12 @@ var canvasGetImageData = function canvasGetImageData(_ref, componentInstance) {
 
 /**
  * @typedef {Object} Param
- * @property {String} canvasId 是 画布标识，传入 <canvas> 组件的 canvas-id 属性。
- * @property {Uint8ClampedArray} data 是 图像像素点数据，一维数组，每四项表示一个像素点的 rgba
- * @property {Number} x 是 源图像数据在目标画布中的位置偏移量（x 轴方向的偏移量）
- * @property {Number} y 是 源图像数据在目标画布中的位置偏移量（y 轴方向的偏移量）
- * @property {Number} width 是 源图像数据矩形区域的宽度
- * @property {Number} height 是 源图像数据矩形区域的高度
+ * @property {String} canvasId 画布标识，传入 <canvas> 组件的 canvas-id 属性。
+ * @property {Uint8ClampedArray} data 图像像素点数据，一维数组，每四项表示一个像素点的 rgba
+ * @property {Number} x 源图像数据在目标画布中的位置偏移量（x 轴方向的偏移量）
+ * @property {Number} y 源图像数据在目标画布中的位置偏移量（y 轴方向的偏移量）
+ * @property {Number} width 源图像数据矩形区域的宽度
+ * @property {Number} height 源图像数据矩形区域的高度
  * @property {Function} [success] 接口调用成功的回调函数
  * @property {Function} [fail] 接口调用失败的回调函数
  * @property {Function} [complete] 接口调用结束的回调函数（调用成功、失败都会执行）
@@ -3071,7 +3360,7 @@ function clearStorage() {
 
 /**
  * 剪贴板部分的api参考了Chameleon项目的实现：
- * 
+ *
  * setClipboardData: https://github.com/chameleon-team/chameleon-api/tree/master/src/interfaces/setClipBoardData
  * getClipboardData: https://github.com/chameleon-team/chameleon-api/tree/master/src/interfaces/getClipBoardData
  */
@@ -3107,7 +3396,7 @@ document.addEventListener('copy', function () {
  * @returns {Promise<{ errMsg: string, data: string }>}
  */
 
-var setClipBoardData = function setClipBoardData(_ref) {
+var setClipboardData = function setClipboardData(_ref) {
   var data = _ref.data,
       success = _ref.success,
       fail = _ref.fail,
@@ -3135,7 +3424,7 @@ var setClipBoardData = function setClipBoardData(_ref) {
       }
 
       var res = {
-        errMsg: 'setClipBoardData:ok',
+        errMsg: 'setClipboardData:ok',
         data: data
       };
       success && success(res);
@@ -3143,7 +3432,7 @@ var setClipBoardData = function setClipBoardData(_ref) {
       resolve(res);
     })["catch"](function (e) {
       var res = {
-        errMsg: "setClipBoardData:fail ".concat(e.message)
+        errMsg: "setClipboardData:fail ".concat(e.message)
       };
       fail && fail(res);
       complete && complete();
@@ -3157,7 +3446,7 @@ var setClipBoardData = function setClipBoardData(_ref) {
  * @returns {Promise<{ errMsg: string, data: string }>}
  */
 
-var getClipBoardData = function getClipBoardData() {
+var getClipboardData = function getClipboardData() {
   var _ref2 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
       success = _ref2.success,
       fail = _ref2.fail,
@@ -3183,6 +3472,114 @@ var getClipBoardData = function getClipBoardData() {
       reject(res);
     });
   });
+};
+
+var compassListener;
+var callbackManager$1 = createCallbackManager();
+/**
+ * 停止监听罗盘数据
+ * @param {Object} object 参数
+ * @param {function} [object.success] 接口调用成功的回调函数
+ * @param {function} [object.fail] 接口调用失败的回调函数
+ * @param {function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
+var stopCompass = function stopCompass() {
+  var _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+      success = _ref.success,
+      fail = _ref.fail,
+      complete = _ref.complete;
+
+  try {
+    window.removeEventListener('deviceorientation', compassListener, true);
+    return successHandler(success, complete)({
+      errMsg: 'stopCompass:ok'
+    });
+  } catch (e) {
+    return errorHandler(fail, complete)({
+      errMsg: "stopCompass:fail ".concat(e.message)
+    });
+  }
+};
+
+var getDeviceOrientationListener = function getDeviceOrientationListener(interval) {
+  var lock;
+  var timer;
+  return function (evt) {
+    if (lock) return;
+    lock = true;
+    timer && clearTimeout(timer);
+    callbackManager$1.trigger({
+      direction: 360 - evt.alpha
+    });
+    timer = setTimeout(function () {
+      lock = false;
+    }, interval);
+  };
+};
+/**
+ * 开始监听罗盘数据
+ * @param {Object} object 参数
+ * @param {function} [object.success] 接口调用成功的回调函数
+ * @param {function} [object.fail] 接口调用失败的回调函数
+ * @param {function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
+
+var startCompass = function startCompass() {
+  var _ref2 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+      success = _ref2.success,
+      fail = _ref2.fail,
+      complete = _ref2.complete;
+
+  try {
+    if (window.DeviceOrientationEvent) {
+      if (compassListener) {
+        stopCompass();
+      }
+
+      compassListener = getDeviceOrientationListener(200);
+      window.addEventListener('deviceorientation', compassListener, true);
+    } else {
+      throw new Error('compass is not supported');
+    }
+
+    return successHandler(success, complete)({
+      errMsg: 'startCompass:ok'
+    });
+  } catch (e) {
+    return errorHandler(fail, complete)({
+      errMsg: "startCompass:fail ".concat(e.message)
+    });
+  }
+};
+/**
+ * @typedef CompassParam 回调参数
+ * @property {number} direction 面对的方向度数
+ * @property {Accuracy} [accuracy] 精度
+ */
+
+/**
+ * @typedef {'high'|'medium'|'low'|'no-contact'|'unreliable'|'unknow'|number} Accuracy
+ * 由于平台差异，accuracy 在 iOS/Android 的值不同。
+ * iOS：accuracy 是一个 number 类型的值，表示相对于磁北极的偏差。0 表示设备指向磁北，90 表示指向东，180 表示指向南，依此类推。
+ * Android：accuracy 是一个 string 类型的枚举值。
+ * high 高精度
+ * medium 中等精度
+ * low 低精度
+ * no-contact 不可信，传感器失去连接
+ * unreliable 不可信，原因未知
+ * unknow ${value} 未知的精度枚举值，即该 Android 系统此时返回的表示精度的 value 不是一个标准的精度枚举值
+ */
+
+/**
+ * 监听罗盘数据变化事件。频率：5 次/秒，接口调用后会自动开始监听，可使用 wx.stopCompass 停止监听。
+ * @param {(obj: CompassParam) => void} callback 罗盘数据变化事件的回调函数
+ */
+
+
+var onCompassChange = function onCompassChange(callback) {
+  callbackManager$1.add(callback);
 };
 
 /**
@@ -3659,7 +4056,7 @@ function queryBat(queue, cb) {
 
     /* eslint-disable */
 
-    var container = component !== null ? Nerv.findDOMNode(component) || document : document;
+    var container = component !== null ? Nerv__default.findDOMNode(component) || document : document;
     /* eslint-enable */
     // 特殊处理 ---- 选自己
 
@@ -3920,6 +4317,121 @@ function () {
 function createSelectorQuery() {
   return new Query();
 }
+
+var deviceMotionListener;
+var callbackManager$2 = createCallbackManager();
+var INTERVALMAP$1 = {
+  game: {
+    interval: 20,
+    frequency: 50
+  },
+  ui: {
+    interval: 60,
+    frequency: 16.67
+  },
+  normal: {
+    interval: 200,
+    frequency: 5
+  }
+};
+/**
+ * 停止监听设备方向的变化。
+ * @param {Object} object 参数
+ * @param {function} [object.success] 接口调用成功的回调函数
+ * @param {function} [object.fail] 接口调用失败的回调函数
+ * @param {function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
+var stopDeviceMotionListening = function stopDeviceMotionListening(_ref) {
+  var success = _ref.success,
+      fail = _ref.fail,
+      complete = _ref.complete;
+
+  try {
+    window.removeEventListener('deviceorientation', deviceMotionListener, true);
+    return successHandler(success, complete)({
+      errMsg: 'stopDeviceMotionListening:ok'
+    });
+  } catch (e) {
+    return errorHandler(fail, complete)({
+      errMsg: "stopDeviceMotionListening:fail ".concat(e.message)
+    });
+  }
+};
+
+var getDeviceOrientationListener$1 = function getDeviceOrientationListener(interval) {
+  var lock;
+  var timer;
+  return function (evt) {
+    if (lock) return;
+    lock = true;
+    timer && clearTimeout(timer);
+    callbackManager$2.trigger({
+      alpha: evt.alpha,
+      beta: evt.beta,
+      gamma: evt.gamma
+    });
+    timer = setTimeout(function () {
+      lock = false;
+    }, interval);
+  };
+};
+/**
+ * 开始监听设备方向的变化。
+ * @param {Object} object 参数
+ * @param {function} [object.success] 接口调用成功的回调函数
+ * @param {function} [object.fail] 接口调用失败的回调函数
+ * @param {function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
+
+var startDeviceMotionListening = function startDeviceMotionListening() {
+  var _ref2 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+      _ref2$interval = _ref2.interval,
+      interval = _ref2$interval === void 0 ? 'normal' : _ref2$interval,
+      success = _ref2.success,
+      fail = _ref2.fail,
+      complete = _ref2.complete;
+
+  try {
+    var intervalObj = INTERVALMAP$1[interval];
+
+    if (window.DeviceOrientationEvent) {
+      if (deviceMotionListener) {
+        stopDeviceMotionListening();
+      }
+
+      deviceMotionListener = getDeviceOrientationListener$1(intervalObj.interval);
+      window.addEventListener('deviceorientation', deviceMotionListener, true);
+    } else {
+      throw new Error('deviceMotion is not supported');
+    }
+
+    return successHandler(success, complete)({
+      errMsg: 'startDeviceMotionListening:ok'
+    });
+  } catch (e) {
+    return errorHandler(fail, complete)({
+      errMsg: "startDeviceMotionListening:fail ".concat(e.message)
+    });
+  }
+};
+/**
+ * @typedef DeviceMotionParam 回调参数
+ * @property {number} alpha 当手机坐标 X/Y 和 地球 X/Y 重合时，绕着 Z 轴转动的夹角为 alpha，范围值为 [0, 2*PI)。逆时针转动为正。
+ * @property {number} beta 当手机坐标 Y/Z 和地球 Y/Z 重合时，绕着 X 轴转动的夹角为 beta。范围值为 [-1*PI, PI) 。顶部朝着地球表面转动为正。也有可能朝着用户为正。
+ * @property {number} gamma 当手机 X/Z 和地球 X/Z 重合时，绕着 Y 轴转动的夹角为 gamma。范围值为 [-1*PI/2, PI/2)。右边朝着地球表面转动为正。
+ */
+
+/**
+ * 监听设备方向变化事件。频率根据 wx.startDeviceMotionListeningListening() 的 interval 参数。可以使用 wx.stopDeviceMotionListeningListening() 停止监听。
+ * @param {(obj: DeviceMotionParam) => void} callback 罗盘数据变化事件的回调函数
+ */
+
+
+var onDeviceMotionChange = function onDeviceMotionChange(callback) {
+  callbackManager$2.add(callback);
+};
 
 /**
  * HTTP Response Header 事件回调函数的参数
@@ -4334,7 +4846,19 @@ var uploadFile = function uploadFile(_ref2) {
   return promise;
 };
 
-function chooseImage(options) {
+/**
+ * 从本地相册选择图片或使用相机拍照。
+ * @param {Object} object 参数
+ * @param {string[]} [object.sourceType=['album', 'camera']] 选择图片的来源（h5端未实现）
+ * @param {string[]} [object.sizeType=['original', 'compressed']] 所选的图片的尺寸（h5端未实现）
+ * @param {number} [object.count=9] 最多可以选择的图片张数
+ * @param {function} [object.success] 接口调用成功的回调函数
+ * @param {function} [object.fail] 接口调用失败的回调函数
+ * @param {function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ * @param {string} [object.imageId] 用来上传的input元素ID（仅h5端）
+ */
+
+var chooseImage = function chooseImage(options) {
   // options must be an Object
   var isObject = shouleBeObject(options);
 
@@ -4350,7 +4874,9 @@ function chooseImage(options) {
       count = _options$count === void 0 ? 1 : _options$count,
       success = options.success,
       fail = options.fail,
-      complete = options.complete;
+      complete = options.complete,
+      _options$imageId = options.imageId,
+      imageId = _options$imageId === void 0 ? 'taroChooseImage' : _options$imageId;
   var res = {
     errMsg: 'chooseImage:ok',
     tempFilePaths: [],
@@ -4370,17 +4896,21 @@ function chooseImage(options) {
     return Promise.reject(res);
   }
 
-  var taroChooseImageId = document.getElementById('taroChooseImage');
+  var taroChooseImageId = document.getElementById(imageId);
 
   if (!taroChooseImageId) {
     var obj = document.createElement('input');
     obj.setAttribute('type', 'file');
-    obj.setAttribute('id', 'taroChooseImage');
-    obj.setAttribute('multiple', 'multiple');
+    obj.setAttribute('id', imageId);
+
+    if (count > 1) {
+      obj.setAttribute('multiple', 'multiple');
+    }
+
     obj.setAttribute('accept', 'image/*');
     obj.setAttribute('style', 'position: fixed; top: -4000px; left: -3000px; z-index: -300;');
     document.body.appendChild(obj);
-    taroChooseImageId = document.getElementById('taroChooseImage');
+    taroChooseImageId = document.getElementById(imageId);
   }
 
   var taroChooseImageCallback;
@@ -4392,7 +4922,8 @@ function chooseImage(options) {
   taroChooseImageId.dispatchEvent(TaroMouseEvents);
 
   taroChooseImageId.onchange = function (e) {
-    var arr = Array.from(e.target.files);
+    var arr = _toConsumableArray(e.target.files);
+
     arr && arr.forEach(function (item) {
       var blob = new Blob([item]);
       var url = URL.createObjectURL(blob);
@@ -4409,7 +4940,1229 @@ function chooseImage(options) {
   };
 
   return taroChooseImagePromise;
+};
+
+// const ORIENTATION_MAP = {
+//   // up 默认方向（手机横持拍照），对应 Exif 中的 1。或无 orientation 信息。
+//   1: 'up',
+//   // up-mirrored 同 up，但镜像翻转，对应 Exif 中的 2
+//   2: 'up-mirrored',
+//   // down 旋转180度，对应 Exif 中的 3
+//   3: 'down',
+//   // down-mirrored 同 down，但镜像翻转，对应 Exif 中的 4
+//   4: 'down-mirrored',
+//   // left-mirrored 同 left，但镜像翻转，对应 Exif 中的 5
+//   5: 'left-mirrored',
+//   // right 顺时针旋转90度，对应 Exif 中的 6
+//   6: 'right',
+//   // right-mirrored 同 right，但镜像翻转，对应 Exif 中的 7
+//   7: 'right-mirrored',
+//   // left 逆时针旋转90度，对应 Exif 中的 8
+//   8: 'left'
+// }
+
+/**
+ * @typedef {'up'|'up-mirrored'|'down'|'down-mirrored'|'left-mirrored'|'right'|'right-mirrored'|'left'} Orientation
+ * @typedef ImageInfo object.success 回调函数的参数
+ * @property {number} width 图片原始宽度，单位px。不考虑旋转。
+ * @property {number} height 图片原始高度，单位px。不考虑旋转。
+ * @property {string} path 图片的本地路径
+ * @property {Orientation} orientation 拍照时设备方向
+ * @property {string} type 图片格式
+ */
+
+/**
+ * 获取图片信息。网络图片需先配置download域名才能生效。
+ * @param {Object} object 参数
+ * @param {string} object.src 图片的路径，可以是相对路径、临时文件路径、存储文件路径、网络图片路径
+ * @param {(res: ImageInfo) => void} [object.success] 接口调用成功的回调函数
+ * @param {function} [object.fail] 接口调用失败的回调函数
+ * @param {function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+var getImageInfo = function getImageInfo() {
+  var _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+      src = _ref.src,
+      success = _ref.success,
+      fail = _ref.fail,
+      complete = _ref.complete;
+
+  return new Promise(function (resolve, reject) {
+    var onSuccess = function onSuccess(res) {
+      success && success(res);
+      complete && complete();
+      resolve(res);
+    };
+
+    var onError = function onError(res) {
+      fail && fail(res);
+      complete && complete();
+      reject(res);
+    };
+
+    var image = new Image();
+
+    image.onload = function () {
+      onSuccess({
+        errMsg: 'getImageInfo:ok',
+        width: image.naturalWidth,
+        height: image.naturalHeight
+      });
+    };
+
+    image.onerror = function (e) {
+      onError({
+        errMsg: "getImageInfo:fail ".concat(e.message)
+      });
+    };
+
+    image.src = src;
+  });
+};
+
+var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
+
+function createCommonjsModule(fn, module) {
+	return module = { exports: {} }, fn(module, module.exports), module.exports;
 }
+
+var performanceNow = createCommonjsModule(function (module) {
+// Generated by CoffeeScript 1.12.2
+(function () {
+  var getNanoSeconds, hrtime, loadTime, moduleLoadTime, nodeLoadTime, upTime;
+
+  if (typeof performance !== "undefined" && performance !== null && performance.now) {
+    module.exports = function () {
+      return performance.now();
+    };
+  } else if (typeof process !== "undefined" && process !== null && process.hrtime) {
+    module.exports = function () {
+      return (getNanoSeconds() - nodeLoadTime) / 1e6;
+    };
+
+    hrtime = process.hrtime;
+
+    getNanoSeconds = function getNanoSeconds() {
+      var hr;
+      hr = hrtime();
+      return hr[0] * 1e9 + hr[1];
+    };
+
+    moduleLoadTime = getNanoSeconds();
+    upTime = process.uptime() * 1e9;
+    nodeLoadTime = moduleLoadTime - upTime;
+  } else if (Date.now) {
+    module.exports = function () {
+      return Date.now() - loadTime;
+    };
+
+    loadTime = Date.now();
+  } else {
+    module.exports = function () {
+      return new Date().getTime() - loadTime;
+    };
+
+    loadTime = new Date().getTime();
+  }
+}).call(commonjsGlobal);
+});
+
+var root$1 = typeof window === 'undefined' ? commonjsGlobal : window,
+    vendors = ['moz', 'webkit'],
+    suffix = 'AnimationFrame',
+    raf = root$1['request' + suffix],
+    caf = root$1['cancel' + suffix] || root$1['cancelRequest' + suffix];
+
+for (var i = 0; !raf && i < vendors.length; i++) {
+  raf = root$1[vendors[i] + 'Request' + suffix];
+  caf = root$1[vendors[i] + 'Cancel' + suffix] || root$1[vendors[i] + 'CancelRequest' + suffix];
+} // Some versions of FF have rAF but not cAF
+
+
+if (!raf || !caf) {
+  var last = 0,
+      id = 0,
+      queue = [],
+      frameDuration = 1000 / 60;
+
+  raf = function raf(callback) {
+    if (queue.length === 0) {
+      var _now = performanceNow(),
+          next = Math.max(0, frameDuration - (_now - last));
+
+      last = next + _now;
+      setTimeout(function () {
+        var cp = queue.slice(0); // Clear queue here to prevent
+        // callbacks from appending listeners
+        // to the current frame's queue
+
+        queue.length = 0;
+
+        for (var i = 0; i < cp.length; i++) {
+          if (!cp[i].cancelled) {
+            try {
+              cp[i].callback(last);
+            } catch (e) {
+              setTimeout(function () {
+                throw e;
+              }, 0);
+            }
+          }
+        }
+      }, Math.round(next));
+    }
+
+    queue.push({
+      handle: ++id,
+      callback: callback,
+      cancelled: false
+    });
+    return id;
+  };
+
+  caf = function caf(handle) {
+    for (var i = 0; i < queue.length; i++) {
+      if (queue[i].handle === handle) {
+        queue[i].cancelled = true;
+      }
+    }
+  };
+}
+
+var raf_1 = function (fn) {
+  // Wrap in a new function to prevent
+  // `cancel` potentially being assigned
+  // to the native rAF function
+  return raf.call(root$1, fn);
+};
+
+var cancel = function () {
+  caf.apply(root$1, arguments);
+};
+
+var polyfill = function (object) {
+  if (!object) {
+    object = root$1;
+  }
+
+  object.requestAnimationFrame = raf;
+  object.cancelAnimationFrame = caf;
+};
+raf_1.cancel = cancel;
+raf_1.polyfill = polyfill;
+
+var Loading = function Loading(props) {
+  return Nerv__default.createElement("div", {
+    className: "viewer-image-loading"
+  });
+};
+
+/**
+ * t: current time（当前时间）；
+ * b: beginning value（初始值）；
+ * c: change in value（变化量）；
+ * _c: final value (最后值)
+ * d: duration（持续时间）。
+ */
+
+var easeOutQuart = function easeOutQuart(t, b, _c, d) {
+  var c = _c - b;
+  return -c * ((t = t / d - 1) * t * t * t - 1) + b;
+};
+/**
+ *
+ * @param {number} value
+ * @param {number} min
+ * @param {number} max
+ */
+
+
+function setScope(value, min, max) {
+  if (value < min) {
+    return min;
+  }
+
+  if (value > max) {
+    return max;
+  }
+
+  return value;
+}
+
+function getDistanceBetweenTouches(e) {
+  if (e.touches.length < 2) return 1;
+  var x1 = e.touches[0].clientX;
+  var y1 = e.touches[0].clientY;
+  var x2 = e.touches[1].clientX;
+  var y2 = e.touches[1].clientY;
+  var distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+  return distance;
+} // const msPerFrame = 1000 / 60;
+
+
+var maxAnimateTime = 1000;
+var minTapMoveValue = 5;
+var maxTapTimeValue = 300;
+/**
+ * 图片默认展示模式：宽度等于屏幕宽度，高度等比缩放；水平居中，垂直居中或者居顶（当高度大于屏幕高度时）
+ * 图片实际尺寸： actualWith, actualHeight
+ * 图片初始尺寸： originWidth, originHeight
+ * 坐标位置：left, top
+ * 放大倍数：zoom
+ * 最大放大倍数：maxZoomNum
+ * 坐标关系：-(maxZoomNum - 1) * originWidth / 2 < left < 0
+ *         -(maxZoomNum - 1) * originHeight / 2 < top < 0
+ * 尺寸关系：width = zoom * originWidth
+ *         heigth = zoom * originHeight
+ *
+ * 放大点位置关系：
+ * 初始点位置：oldPointLeft, oldPointTop
+ * 放大后位置：newPointLeft, newPointTop
+ * 对应关系： newPointLeft = zoom * oldPointLeft
+ *          newPointTop = zoom * oldPointTop
+ *
+ * 坐标位置：-1*left = -1*startLeft + (newPointLeft - oldPointLeft) =-1*startLeft (zoom - 1) * oldPointLeft
+ *         -1*top = -1*startTop + (newPointTop - oldPointTop) =-1*startLeft (zoom - 1) * oldPointTop
+ * =>
+ * left = startLeft + (1 - zoom) * oldPointLeft
+ * top = startTop + (1 - zoom) * oldPointTop
+ */
+
+var ImageContainer =
+/*#__PURE__*/
+function (_PureComponent) {
+  _inherits(ImageContainer, _PureComponent);
+
+  function ImageContainer(_props, context) {
+    var _this;
+
+    _classCallCheck(this, ImageContainer);
+
+    _this = _possibleConstructorReturn(this, _getPrototypeOf(ImageContainer).call(this, _props, context));
+
+    _defineProperty(_assertThisInitialized(_this), "state", {
+      width: 0,
+      height: 0,
+      scale: 1,
+      left: 0,
+      top: 0,
+      isLoaded: false
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "onLoad", function () {
+      _this.actualWith = _this.img.width;
+      _this.actualHeight = _this.img.height;
+      var _this$props = _this.props,
+          screenHeight = _this$props.screenHeight,
+          screenWidth = _this$props.screenWidth;
+      var left = 0;
+      var top = 0;
+      _this.originWidth = screenWidth;
+      _this.originHeight = _this.actualHeight / _this.actualWith * screenWidth;
+      _this.originScale = 1;
+
+      if (_this.actualHeight / _this.actualWith < screenHeight / screenWidth) {
+        top = parseInt((screenHeight - _this.originHeight) / 2, 10);
+      }
+
+      _this.originTop = top;
+
+      _this.setState({
+        width: _this.originWidth,
+        height: _this.originHeight,
+        scale: 1,
+        left: left,
+        top: top,
+        isLoaded: true
+      });
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "onError", function () {
+      _this.setState({
+        isLoaded: true
+      });
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "loadImg", function (url) {
+      _this.img = new Image();
+      _this.img.src = url;
+      _this.img.onload = _this.onLoad;
+      _this.img.onerror = _this.onError;
+
+      _this.setState({
+        isLoaded: false
+      });
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "unloadImg", function () {
+      delete _this.img.onerror;
+      delete _this.img.onload;
+      delete _this.img.src;
+      delete _this.img;
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "handleTouchStart", function (event) {
+      // console.info('handleTouchStart')
+      // event.preventDefault()
+      // event.stopPropagation()
+      if (_this.animationID) {
+        raf_1.cancel(_this.animationID);
+      }
+
+      switch (event.touches.length) {
+        case 1:
+          {
+            var targetEvent = event.touches[0];
+            _this.startX = targetEvent.clientX;
+            _this.startY = targetEvent.clientY;
+            _this.diffX = 0;
+            _this.diffY = 0;
+            _this.startLeft = _this.state.left;
+            _this.startTop = _this.state.top; // console.info('handleTouchStart this.startX = %s, this.startY = %s, this.startLeft = %s, this.startTop = %s', this.startX, this.startY, this.startLeft, this.startTop)
+
+            _this.onTouchStartTime = new Date().getTime();
+            _this.haveCallMoveFn = false;
+            break;
+          }
+
+        case 2:
+          {
+            // 两个手指
+            // 设置手双指模式
+            _this.isTwoFingerMode = true; // 计算两个手指中间点屏幕上的坐标
+
+            var middlePointClientLeft = Math.abs(Math.round((event.touches[0].clientX + event.touches[1].clientX) / 2));
+            var middlePointClientTop = Math.abs(Math.round((event.touches[0].clientY + event.touches[1].clientY) / 2)); // 保存图片初始位置和尺寸
+
+            _this.startLeft = _this.state.left;
+            _this.startTop = _this.state.top;
+            _this.startScale = _this.state.scale; // 计算手指中间点在图片上的位置（坐标值）
+
+            _this.oldPointLeft = middlePointClientLeft - _this.startLeft;
+            _this.oldPointTop = middlePointClientTop - _this.startTop;
+            _this._touchZoomDistanceStart = getDistanceBetweenTouches(event);
+            break;
+          }
+
+        default:
+          break;
+      }
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "handleTouchMove", function (event) {
+      // event.preventDefault()
+      // event.stopPropagation()
+      switch (event.touches.length) {
+        case 1:
+          {
+            var targetEvent = event.touches[0];
+            var diffX = targetEvent.clientX - _this.startX;
+            var diffY = targetEvent.clientY - _this.startY;
+            _this.diffX = diffX;
+            _this.diffY = diffY; // console.info('handleTouchMove one diffX=%s, diffY=%s', diffX, diffY)
+            // 判断是否为点击
+
+            if (Math.abs(diffX) < minTapMoveValue && Math.abs(diffY) < minTapMoveValue) {
+              return;
+            }
+
+            var scale = _this.state.scale;
+            var width = scale * _this.originWidth;
+
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+              // 水平移动
+              if (_this.state.scale === _this.originScale && Math.abs(diffX) > minTapMoveValue) {
+                _this.haveCallMoveFn = true;
+
+                _this.callHandleMove(diffX);
+
+                return;
+              } // console.info('handleMove one left=%s, this.startLeft=%s,this.originWidth=%s, width=%s', left, this.startLeft, this.originWidth, width)
+
+
+              if (diffX < 0 && _this.startLeft <= _this.originWidth - width) {
+                _this.haveCallMoveFn = true;
+
+                _this.callHandleMove(diffX);
+
+                return;
+              }
+
+              if (diffX > 0 && _this.startLeft >= 0) {
+                _this.haveCallMoveFn = true;
+
+                _this.callHandleMove(diffX);
+
+                return;
+              }
+            }
+
+            var screenHeight = _this.props.screenHeight;
+            var height = scale * _this.originHeight;
+            var newTop = (screenHeight - height) / 2;
+            var newLeft = _this.startLeft + diffX;
+
+            if (height > screenHeight || _this.state.scale === _this.originScale) {
+              newTop = _this.startTop + diffY;
+            } // console.info('handleTouchMove one newLeft=%s, newTop=%s', newLeft, newTop)
+
+
+            _this.setState({
+              left: newLeft,
+              top: newTop
+            });
+
+            break;
+          }
+
+        case 2:
+          {
+            // 两个手指
+            _this._touchZoomDistanceEnd = getDistanceBetweenTouches(event);
+            var zoom = Math.sqrt(_this._touchZoomDistanceEnd / _this._touchZoomDistanceStart);
+
+            var _scale = zoom * _this.startScale;
+
+            var left = _this.startLeft + (1 - zoom) * _this.oldPointLeft;
+            var top = _this.startTop + (1 - zoom) * _this.oldPointTop;
+
+            _this.setState({
+              left: left,
+              top: top,
+              scale: _scale
+            });
+
+            break;
+          }
+
+        default:
+          break;
+      }
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "handleTouchEnd", function (event) {
+      // console.info('handleTouchEnd', event.touches.length)
+      event.preventDefault();
+
+      if (_this.isTwoFingerMode) {
+        // 双指操作结束
+        var touchLen = event.touches.length;
+        _this.isTwoFingerMode = false;
+
+        if (touchLen === 1) {
+          var targetEvent = event.touches[0];
+          _this.startX = targetEvent.clientX;
+          _this.startY = targetEvent.clientY;
+          _this.diffX = 0;
+          _this.diffY = 0;
+        }
+
+        _this.setState(function (prevState, props) {
+          var scale = setScope(prevState.scale, 1, props.maxZoomNum);
+          var width = scale * _this.originWidth;
+          var height = scale * _this.originHeight;
+          var zoom = scale / _this.startScale;
+          var left = setScope(_this.startLeft + (1 - zoom) * _this.oldPointLeft, _this.originWidth - width, 0);
+          var top;
+
+          if (height > props.screenHeight) {
+            top = setScope(_this.startTop + (1 - zoom) * _this.oldPointTop, props.screenHeight - height, 0);
+          } else {
+            top = (props.screenHeight - height) / 2;
+          }
+
+          if (touchLen === 1) {
+            _this.startLeft = left;
+            _this.startTop = top;
+            _this.startScale = scale; // console.info('this.startX = %s, this.startY = %s, this.startLeft = %s, this.startTop = %s', this.startX, this.startY, this.startLeft, this.startTop)
+          } // console.info('zoom = %s, left = %s, top = %s, width=%s, height= %s', zoom, left, top, width, height)
+
+
+          return {
+            left: left,
+            top: top,
+            scale: scale
+          };
+        });
+      } else {
+        // 单指结束（ontouchend）
+        var diffTime = new Date().getTime() - _this.onTouchStartTime;
+
+        var _assertThisInitialize = _assertThisInitialized(_this),
+            diffX = _assertThisInitialize.diffX,
+            diffY = _assertThisInitialize.diffY; // console.info('handleTouchEnd one diffTime = %s, diffX = %s, diffy = %s', diffTime, diffX, diffY)
+        // 判断为点击则关闭图片浏览组件
+
+
+        if (diffTime < maxTapTimeValue && Math.abs(diffX) < minTapMoveValue && Math.abs(diffY) < minTapMoveValue) {
+          _this.context.onClose();
+
+          return;
+        } // 水平移动
+
+
+        if (_this.haveCallMoveFn) {
+          var isChangeImage = _this.callHandleEnd(diffY < 30);
+
+          if (isChangeImage) {
+            // 如果切换图片则重置当前图片状态
+            setTimeout(function () {
+              _this.setState({
+                scale: _this.originScale,
+                left: 0,
+                top: _this.originTop
+              });
+            }, maxAnimateTime / 3);
+            return;
+          }
+        } // TODO 下拉移动距离超过屏幕高度的 1/3 则关闭
+        // console.info(Math.abs(diffY) > (this.props.screenHeight / 2), this.startTop, this.originTop);
+        // if (Math.abs(diffX) < Math.abs(diffY) && Math.abs(diffY) > (this.props.screenHeight / 3) && this.startTop === this.originTop) {
+        //   this.context.onClose();
+        //   return;
+        // }
+
+
+        var x;
+        var y;
+        var scale = _this.state.scale; // const width = scale * this.originWidth;
+
+        var height = scale * _this.originHeight; // 使用相同速度算法
+
+        x = diffX * maxAnimateTime / diffTime + _this.startLeft;
+        y = diffY * maxAnimateTime / diffTime + _this.startTop;
+
+        if (_this.state.scale === _this.originScale) {
+          x = 0;
+
+          if (height > _this.props.screenHeight) {
+            y = setScope(y, _this.props.screenHeight - height, 0);
+          } else {
+            y = _this.originTop;
+          }
+        } // x = setScope(x, this.originWidth - width, 0);
+        // if (height > this.props.screenHeight) {
+        // y = setScope(y, this.props.screenHeight - height, 0);
+        // } else {
+        //   y = this.state.top;
+        // }
+
+
+        _this.animateStartValue = {
+          x: _this.state.left,
+          y: _this.state.top
+        };
+        _this.animateFinalValue = {
+          x: x,
+          y: y
+        };
+        _this.animateStartTime = Date.now();
+
+        _this.startAnimate();
+      }
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "startAnimate", function () {
+      _this.animationID = raf_1(function () {
+        // calculate current time
+        var curTime = Date.now() - _this.animateStartTime;
+
+        var left;
+        var top; // animate complete
+
+        if (curTime > maxAnimateTime) {
+          _this.setState(function (prevState, props) {
+            var width = prevState.scale * _this.originWidth;
+            var height = prevState.scale * _this.originHeight;
+            left = setScope(prevState.left, _this.originWidth - width, 0);
+
+            if (height > props.screenHeight) {
+              top = setScope(prevState.top, props.screenHeight - height, 0);
+            } else {
+              top = (props.screenHeight - height) / 2;
+            } // console.info('end animate left= %s, top = %s', left, top)
+
+
+            return {
+              left: left,
+              top: top
+            };
+          });
+        } else {
+          left = easeOutQuart(curTime, _this.animateStartValue.x, _this.animateFinalValue.x, maxAnimateTime);
+          top = easeOutQuart(curTime, _this.animateStartValue.y, _this.animateFinalValue.y, maxAnimateTime); // console.info('startAnimate left= %s, top = %s, curTime = %s', left, top, curTime)
+
+          _this.setState({
+            left: left,
+            top: top
+          });
+
+          _this.startAnimate();
+        }
+      });
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "callHandleMove", function (diffX) {
+      if (!_this.isCalledHandleStart) {
+        _this.isCalledHandleStart = true;
+
+        if (_this.props.handleStart) {
+          _this.props.handleStart();
+        }
+      }
+
+      _this.props.handleMove(diffX);
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "callHandleEnd", function (isAllowChange) {
+      if (_this.isCalledHandleStart) {
+        _this.isCalledHandleStart = false;
+
+        if (_this.props.handleEnd) {
+          return _this.props.handleEnd(isAllowChange);
+        }
+      }
+    });
+
+    _this.actualHeight = 0; // 图片实际高度
+
+    _this.actualWith = 0; // 图片实际宽度
+
+    _this.originHeight = 0; // 图片默认展示模式下高度
+
+    _this.originWidth = 0; // 图片默认展示模式下宽度
+
+    _this.originScale = 1; // 图片初始缩放比例
+
+    _this.startLeft = 0; // 开始触摸操作时的 left 值
+
+    _this.startTop = 0; // 开始触摸操作时的 top 值
+
+    _this.startScale = 1; // 开始缩放操作时的 scale 值
+
+    _this.onTouchStartTime = 0; // 单指触摸开始时间
+
+    _this.isTwoFingerMode = false; // 是否为双指模式
+
+    _this.oldPointLeft = 0; // 计算手指中间点在图片上的位置（坐标值）
+
+    _this.oldPointTop = 0; // 计算手指中间点在图片上的位置（坐标值）
+
+    _this._touchZoomDistanceStart = 0; // 用于记录双指距离
+
+    _this.haveCallMoveFn = false;
+    _this.diffX = 0; // 记录最后 move 事件 移动距离
+
+    _this.diffY = 0; // 记录最后 move 事件 移动距离
+
+    _this.animationID = 0;
+    _this.animateStartTime = 0;
+    _this.animateStartValue = {
+      x: 0,
+      y: 0
+    };
+    _this.animateFinalValue = {
+      x: 0,
+      y: 0
+    };
+    return _this;
+  }
+
+  _createClass(ImageContainer, [{
+    key: "componentWillMount",
+    value: function componentWillMount() {
+      this.loadImg(this.props.src);
+    }
+  }, {
+    key: "componentWillUnmount",
+    value: function componentWillUnmount() {
+      this.unloadImg();
+
+      if (this.animationID) {
+        raf_1.cancel(this.animationID);
+      }
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      var _this$props2 = this.props,
+          screenWidth = _this$props2.screenWidth,
+          screenHeight = _this$props2.screenHeight,
+          src = _this$props2.src,
+          divLeft = _this$props2.left;
+      var _this$state = this.state,
+          isLoaded = _this$state.isLoaded,
+          left = _this$state.left,
+          top = _this$state.top,
+          scale = _this$state.scale,
+          width = _this$state.width,
+          height = _this$state.height;
+      var ImageStyle = {
+        width: width,
+        height: height
+      };
+      var translate = "translate3d(".concat(left, "px, ").concat(top, "px, 0) scale(").concat(scale, ")");
+      ImageStyle.WebkitTransform = translate;
+      ImageStyle.transform = translate;
+      var defaultStyle = {
+        left: divLeft,
+        width: screenWidth,
+        height: screenHeight
+      }; // console.info('ImageContainer render');
+
+      return Nerv__default.createElement("div", {
+        className: "viewer-image-container",
+        onTouchStart: this.handleTouchStart,
+        onTouchMove: this.handleTouchMove,
+        onTouchEnd: this.handleTouchEnd,
+        style: defaultStyle
+      }, isLoaded ? Nerv__default.createElement("img", {
+        src: src,
+        style: ImageStyle,
+        alt: ""
+      }) : Nerv__default.createElement(Loading, null));
+    }
+  }]);
+
+  return ImageContainer;
+}(Nerv.PureComponent);
+
+_defineProperty(ImageContainer, "propTypes", {
+  maxZoomNum: Nerv.PropTypes.number.isRequired,
+  handleStart: Nerv.PropTypes.func.isRequired,
+  handleMove: Nerv.PropTypes.func.isRequired,
+  handleEnd: Nerv.PropTypes.func.isRequired
+});
+
+_defineProperty(ImageContainer, "contextTypes", {
+  onClose: Nerv.PropTypes.func
+});
+
+var DEFAULT_TIME_DIFF = 200;
+
+var ListContainer =
+/*#__PURE__*/
+function (_PureComponent) {
+  _inherits(ListContainer, _PureComponent);
+
+  function ListContainer(props, context) {
+    var _this;
+
+    _classCallCheck(this, ListContainer);
+
+    _this = _possibleConstructorReturn(this, _getPrototypeOf(ListContainer).call(this, props, context));
+
+    _defineProperty(_assertThisInitialized(_this), "state", {
+      left: 0
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "easing", function (distance) {
+      var t = distance;
+      var b = 0;
+      var d = _this.props.screenWidth; // 允许拖拽的最大距离
+
+      var c = d / 2.5; // 提示标签最大有效拖拽距离
+
+      return c * Math.sin(t / d * (Math.PI / 2)) + b;
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "handleStart", function () {
+      _this.startLeft = _this.state.left;
+      _this.startTime = new Date().getTime();
+      _this.isNeedSpring = false;
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "handleMove", function (diffX) {
+      var nDiffx = diffX; // 限制最大 diffx 值
+
+      if (Math.abs(nDiffx) > _this.props.screenWidth) {
+        if (nDiffx < 0) {
+          nDiffx = -_this.props.screenWidth;
+        }
+
+        if (nDiffx > 0) {
+          nDiffx = _this.props.screenWidth;
+        }
+      }
+
+      if (_this.state.left >= 0 && nDiffx > 0) {
+        nDiffx = _this.easing(nDiffx);
+      } else if (_this.state.left <= -_this.maxLeft && nDiffx < 0) {
+        nDiffx = -_this.easing(-nDiffx);
+      }
+
+      _this.setState({
+        left: _this.startLeft + nDiffx
+      });
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "handleEnd", function (isAllowChange) {
+      var index;
+
+      var diffTime = new Date().getTime() - _this.startTime; // console.info('handleEnd %s', isAllowChange, diffTime, this.state.left, this.startLeft, this.props.index)
+      // 快速拖动情况下切换图片
+
+
+      if (isAllowChange && diffTime < DEFAULT_TIME_DIFF) {
+        if (_this.state.left < _this.startLeft) {
+          index = _this.props.index + 1;
+        } else {
+          index = _this.props.index - 1;
+        }
+      } else {
+        index = Math.abs(Math.round(_this.state.left / _this.perDistance));
+      } // 处理边界情况
+
+
+      if (index < 0) {
+        index = 0;
+      } else if (index > _this.length - 1) {
+        index = _this.length - 1;
+      }
+
+      _this.setState({
+        left: -_this.perDistance * index
+      });
+
+      _this.isNeedSpring = true;
+
+      if (index !== _this.props.index) {
+        _this.props.changeIndex(index);
+
+        return true;
+      }
+
+      return false;
+    });
+
+    _this.isNeedSpring = false;
+    return _this;
+  }
+
+  _createClass(ListContainer, [{
+    key: "getChildContext",
+    value: function getChildContext() {
+      return _objectSpread2({}, this.context);
+    }
+  }, {
+    key: "componentWillMount",
+    value: function componentWillMount() {
+      var _this$props = this.props,
+          screenWidth = _this$props.screenWidth,
+          urls = _this$props.urls,
+          index = _this$props.index,
+          gap = _this$props.gap;
+      this.length = urls.length;
+      this.perDistance = screenWidth + gap;
+      this.maxLeft = this.perDistance * (this.length - 1);
+      this.isNeedSpring = false;
+      this.setState({
+        left: -this.perDistance * index
+      });
+    }
+  }, {
+    key: "componentWillReceiveProps",
+    value: function componentWillReceiveProps(nextProps) {
+      if (this.props.index !== nextProps.index) {
+        this.isNeedSpring = true;
+        this.setState({
+          left: -this.perDistance * nextProps.index
+        });
+      }
+    }
+    /**
+     * 拖拽的缓动公式 - easeOutSine
+     * Link http://easings.net/zh-cn#
+     * t: current time（当前时间）；
+     * b: beginning value（初始值）；
+     * c: change in value（变化量）；
+     * d: duration（持续时间）。
+     */
+
+  }, {
+    key: "render",
+    value: function render() {
+      var _this2 = this;
+
+      var _this$props2 = this.props,
+          maxZoomNum = _this$props2.maxZoomNum,
+          screenWidth = _this$props2.screenWidth,
+          screenHeight = _this$props2.screenHeight,
+          urls = _this$props2.urls,
+          speed = _this$props2.speed;
+      var left = this.state.left;
+      var defaultStyle = {};
+
+      if (this.isNeedSpring) {
+        var duration = "".concat(speed, "ms");
+        defaultStyle.WebkitTransitionDuration = duration;
+        defaultStyle.transitionDuration = duration;
+      }
+
+      var translate = "translate3d(".concat(left, "px, 0, 0)");
+      defaultStyle.WebkitTransform = translate;
+      defaultStyle.transform = translate;
+      return Nerv__default.createElement("div", {
+        className: "viewer-list-container",
+        style: defaultStyle
+      }, urls.map(function (item, i) {
+        return Nerv__default.createElement(ImageContainer, {
+          key: i // eslint-disable-line
+          ,
+          src: item,
+          maxZoomNum: maxZoomNum,
+          handleStart: _this2.handleStart,
+          handleMove: _this2.handleMove,
+          handleEnd: _this2.handleEnd,
+          left: _this2.perDistance * i,
+          screenWidth: screenWidth,
+          screenHeight: screenHeight
+        });
+      }));
+    }
+  }]);
+
+  return ListContainer;
+}(Nerv.PureComponent);
+
+_defineProperty(ListContainer, "propTypes", {
+  maxZoomNum: Nerv.PropTypes.number.isRequired,
+  changeIndex: Nerv.PropTypes.func.isRequired,
+  gap: Nerv.PropTypes.number.isRequired,
+  speed: Nerv.PropTypes.number.isRequired // Duration of transition between slides (in ms)
+
+});
+
+var screenWidth = typeof document !== 'undefined' && document.documentElement.clientWidth;
+var screenHeight = typeof document !== 'undefined' && document.documentElement.clientHeight;
+
+var WrapViewer =
+/*#__PURE__*/
+function (_Component) {
+  _inherits(WrapViewer, _Component);
+
+  function WrapViewer() {
+    var _getPrototypeOf2;
+
+    var _this;
+
+    _classCallCheck(this, WrapViewer);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _possibleConstructorReturn(this, (_getPrototypeOf2 = _getPrototypeOf(WrapViewer)).call.apply(_getPrototypeOf2, [this].concat(args)));
+
+    _defineProperty(_assertThisInitialized(_this), "state", {
+      index: 0
+    });
+
+    _defineProperty(_assertThisInitialized(_this), "changeIndex", function (index) {
+      // console.info('changeIndex index = ', index)
+      _this.setState({
+        index: index
+      });
+    });
+
+    return _this;
+  }
+
+  _createClass(WrapViewer, [{
+    key: "getChildContext",
+    value: function getChildContext() {
+      return _objectSpread2({}, this.context);
+    }
+  }, {
+    key: "componentDidMount",
+    value: function componentDidMount() {
+      var index = this.props.index;
+      this.setState({
+        index: index
+      });
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      var _this$props = this.props,
+          zIndex = _this$props.zIndex,
+          urls = _this$props.urls,
+          maxZoomNum = _this$props.maxZoomNum,
+          gap = _this$props.gap,
+          speed = _this$props.speed;
+      var index = this.state.index;
+      return Nerv__default.createElement("div", {
+        className: "wx-image-viewer",
+        style: {
+          zIndex: zIndex
+        }
+      }, Nerv__default.createElement("div", {
+        className: "viewer-cover"
+      }), Nerv__default.createElement(ListContainer, {
+        screenWidth: screenWidth,
+        screenHeight: screenHeight,
+        changeIndex: this.changeIndex,
+        urls: urls,
+        maxZoomNum: maxZoomNum,
+        gap: gap,
+        speed: speed,
+        index: index
+      }));
+    }
+  }]);
+
+  return WrapViewer;
+}(Nerv.Component);
+
+_defineProperty(WrapViewer, "propTypes", {
+  index: Nerv.PropTypes.number.isRequired,
+  // 当前显示图片的http链接
+  urls: Nerv.PropTypes.array.isRequired,
+  // 需要预览的图片http链接列表
+  maxZoomNum: Nerv.PropTypes.number.isRequired,
+  // 最大放大倍数
+  zIndex: Nerv.PropTypes.number.isRequired,
+  // 组件图层深度
+  gap: Nerv.PropTypes.number.isRequired,
+  // 间隙
+  speed: Nerv.PropTypes.number.isRequired // Duration of transition between slides (in ms)
+
+});
+
+function styleInject(css, ref) {
+  if (ref === void 0) ref = {};
+  var insertAt = ref.insertAt;
+
+  if (!css || typeof document === 'undefined') {
+    return;
+  }
+
+  var head = document.head || document.getElementsByTagName('head')[0];
+  var style = document.createElement('style');
+  style.type = 'text/css';
+
+  if (insertAt === 'top') {
+    if (head.firstChild) {
+      head.insertBefore(style, head.firstChild);
+    } else {
+      head.appendChild(style);
+    }
+  } else {
+    head.appendChild(style);
+  }
+
+  if (style.styleSheet) {
+    style.styleSheet.cssText = css;
+  } else {
+    style.appendChild(document.createTextNode(css));
+  }
+}
+
+var css = ".wx-image-viewer {\r\n  position: fixed;\r\n  left: 0;\r\n  top: 0;\r\n  width: 100%;\r\n  height: 100%;\r\n}\r\n.wx-image-viewer .viewer-cover {\r\n  position: absolute;\r\n  left: 0;\r\n  top: 0;\r\n  width: 100%;\r\n  height: 100%;\r\n  background-color: #000000;\r\n}\r\n.wx-image-viewer .viewer-list-container {\r\n  position: absolute;\r\n  left: 0;\r\n  top: 0;\r\n  width: 100%;\r\n  height: 100%;\r\n  -webkit-transition-property: -webkit-transform;\r\n  transition-property: -webkit-transform;\r\n  -o-transition-property: transform;\r\n  transition-property: transform;\r\n  transition-property: transform,-webkit-transform;\r\n}\r\n.wx-image-viewer .viewer-image-container {\r\n  position: absolute;\r\n  top: 0;\r\n  left: 0;\r\n  overflow: hidden;\r\n}\r\n.wx-image-viewer .viewer-image-container img {\r\n  position: absolute;\r\n  left: 0;\r\n  top: 0;\r\n  transform-origin: left top;\r\n  -webkit-transform-origin: left top;\r\n  -moz-transform-origin: left top;\r\n  -o-transform-origin: left top;\r\n  -webkit-transition-property: -webkit-transform;\r\n  transition-property: -webkit-transform;\r\n  -o-transition-property: transform;\r\n  transition-property: transform;\r\n  transition-property: transform,-webkit-transform;\r\n}\r\n.wx-image-viewer .viewer-image-pointer {\r\n  position: fixed;\r\n  bottom: 10px;\r\n  left: 0;\r\n  width: 100%;\r\n  text-align: center;\r\n}\r\n.wx-image-viewer .viewer-image-pointer .pointer {\r\n  display: inline-block;\r\n  width: 8px;\r\n  height: 8px;\r\n  margin: 0 5px;\r\n  border-radius: 100%;\r\n  background-color: #333;\r\n}\r\n.wx-image-viewer .viewer-image-pointer .pointer.on {\r\n  background-color: #fff;\r\n}\r\n.wx-image-viewer .viewer-image-loading {\r\n  position: absolute;\r\n  margin: auto;\r\n  left: 0;\r\n  right: 0;\r\n  top: 0;\r\n  bottom: 0;\r\n  width: 32px;\r\n  height: 32px;\r\n  box-sizing: border-box;\r\n  border-radius: 100%;\r\n  border-width: 4px;\r\n  border-style: solid;\r\n  border-color: #333;\r\n  border-bottom-color: #FFF;\r\n  -webkit-animation: roll 1s linear infinite;\r\n  animation: roll 1s linear infinite;\r\n}\r\n@-webkit-keyframes roll {\r\n  from {\r\n    -webkit-transform: rotate(0deg);\r\n  }\r\n  to {\r\n    -webkit-transform: rotate(360deg);\r\n  }\r\n}\r\n@keyframes roll {\r\n  from {\r\n    transform: rotate(0deg);\r\n  }\r\n  to {\r\n    transform: rotate(360deg);\r\n  }\r\n}\r\n";
+styleInject(css);
+
+var WxImageViewer =
+/*#__PURE__*/
+function (_Component) {
+  _inherits(WxImageViewer, _Component);
+
+  function WxImageViewer() {
+    _classCallCheck(this, WxImageViewer);
+
+    return _possibleConstructorReturn(this, _getPrototypeOf(WxImageViewer).apply(this, arguments));
+  }
+
+  _createClass(WxImageViewer, [{
+    key: "getChildContext",
+    value: function getChildContext() {
+      return {
+        onClose: this.props.onClose
+      };
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      return Nerv__default.createPortal(Nerv__default.createElement(WrapViewer, this.props), document.body);
+    }
+  }]);
+
+  return WxImageViewer;
+}(Nerv.Component);
+
+_defineProperty(WxImageViewer, "propTypes", {
+  maxZoomNum: Nerv.PropTypes.number,
+  // 最大放大倍数
+  zIndex: Nerv.PropTypes.number,
+  // 组件图层深度
+  index: Nerv.PropTypes.number,
+  // 当前显示图片的http链接
+  urls: Nerv.PropTypes.array.isRequired,
+  // 需要预览的图片http链接列表
+  gap: Nerv.PropTypes.number,
+  // 间隙
+  speed: Nerv.PropTypes.number,
+  // Duration of transition between slides (in ms)
+  onClose: Nerv.PropTypes.func.isRequired // 关闭组件回调
+
+});
+
+_defineProperty(WxImageViewer, "childContextTypes", {
+  onClose: Nerv.PropTypes.func
+});
+
+_defineProperty(WxImageViewer, "defaultProps", {
+  maxZoomNum: 4,
+  zIndex: 510,
+  index: 0,
+  gap: 10,
+  speed: 300
+});
+
+/**
+ * 在新页面中全屏预览图片。预览的过程中用户可以进行保存图片、发送给朋友等操作。
+ * @param {Object} object
+ * @param {Array.<string>} object.urls 需要预览的图片链接列表。2.2.3 起支持云文件ID。
+ * @param {string} [object.current=object.urls[0]]  urls的第一张 当前显示图片的链接
+ * @param {function} [object.success] 接口调用成功的回调函数
+ * @param {function} [object.fail] 接口调用失败的回调函数
+ * @param {function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
+var previewImage = function previewImage() {
+  var _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+      urls = _ref.urls,
+      current = _ref.current,
+      success = _ref.success,
+      fail = _ref.fail,
+      complete = _ref.complete;
+
+  var div = document.createElement('div');
+  var currentIndex = urls.reduce(function (prev, curr, index) {
+    return curr === current ? index : prev;
+  }, -1);
+
+  var onSuccess = function onSuccess(res) {
+    success && success(res);
+    complete && complete();
+  };
+
+  var props = {
+    urls: urls,
+    onClose: function onClose() {
+      Nerv.unmountComponentAtNode(div);
+    }
+  };
+
+  if (currentIndex > -1) {
+    props.index = currentIndex;
+  }
+
+  Nerv__default.render(Nerv__default.createElement(WxImageViewer, props), div);
+  return onSuccess({
+    errMsg: 'previewImage:ok'
+  });
+};
+
+var noop = function noop() {};
 
 var Toast =
 /*#__PURE__*/
@@ -4417,9 +6170,7 @@ function () {
   function Toast() {
     _classCallCheck(this, Toast);
 
-    var noop = function noop() {};
-
-    this.options = {
+    _defineProperty(this, "options", {
       title: '',
       icon: 'none',
       image: '',
@@ -4428,92 +6179,87 @@ function () {
       success: noop,
       fail: noop,
       complete: noop
-    };
+    });
+
+    _defineProperty(this, "style", {
+      maskStyle: {
+        'position': 'fixed',
+        'z-index': '1000',
+        'top': '0',
+        'right': '0',
+        'left': '0',
+        'bottom': '0'
+      },
+      toastStyle: {
+        'z-index': '5000',
+        'box-sizing': 'border-box',
+        'display': 'flex',
+        'flex-direction': 'column',
+        'justify-content': 'center',
+        '-webkit-justify-content': 'center',
+        'position': 'fixed',
+        'top': '50%',
+        'left': '50%',
+        'min-width': '120px',
+        'max-width': '200px',
+        'min-height': '120px',
+        'padding': '15px',
+        'transform': 'translate(-50%, -50%)',
+        'border-radius': '5px',
+        'text-align': 'center',
+        'line-height': '1.6',
+        'color': '#FFFFFF',
+        'background': 'rgba(17, 17, 17, 0.7)'
+      },
+      successStyle: {
+        'margin': '0',
+        'vertical-align': 'middle',
+        'font-family': 'taro',
+        '-webkit-font-smoothing': 'antialiased',
+        'color': '#FFFFFF',
+        'font-size': '55px',
+        'line-height': '1'
+      },
+      loadingStyle: {
+        'margin': '6px auto',
+        'width': '38px',
+        'height': '38px',
+        '-webkit-animation': 'taroLoading 1s steps(12, end) infinite',
+        'animation': 'taroLoading 1s steps(12, end) infinite',
+        'background': 'transparent url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHBhdGggZmlsbD0ibm9uZSIgZD0iTTAgMGgxMDB2MTAwSDB6Ii8+PHJlY3Qgd2lkdGg9IjciIGhlaWdodD0iMjAiIHg9IjQ2LjUiIHk9IjQwIiBmaWxsPSIjRTlFOUU5IiByeD0iNSIgcnk9IjUiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgLTMwKSIvPjxyZWN0IHdpZHRoPSI3IiBoZWlnaHQ9IjIwIiB4PSI0Ni41IiB5PSI0MCIgZmlsbD0iIzk4OTY5NyIgcng9IjUiIHJ5PSI1IiB0cmFuc2Zvcm09InJvdGF0ZSgzMCAxMDUuOTggNjUpIi8+PHJlY3Qgd2lkdGg9IjciIGhlaWdodD0iMjAiIHg9IjQ2LjUiIHk9IjQwIiBmaWxsPSIjOUI5OTlBIiByeD0iNSIgcnk9IjUiIHRyYW5zZm9ybT0icm90YXRlKDYwIDc1Ljk4IDY1KSIvPjxyZWN0IHdpZHRoPSI3IiBoZWlnaHQ9IjIwIiB4PSI0Ni41IiB5PSI0MCIgZmlsbD0iI0EzQTFBMiIgcng9IjUiIHJ5PSI1IiB0cmFuc2Zvcm09InJvdGF0ZSg5MCA2NSA2NSkiLz48cmVjdCB3aWR0aD0iNyIgaGVpZ2h0PSIyMCIgeD0iNDYuNSIgeT0iNDAiIGZpbGw9IiNBQkE5QUEiIHJ4PSI1IiByeT0iNSIgdHJhbnNmb3JtPSJyb3RhdGUoMTIwIDU4LjY2IDY1KSIvPjxyZWN0IHdpZHRoPSI3IiBoZWlnaHQ9IjIwIiB4PSI0Ni41IiB5PSI0MCIgZmlsbD0iI0IyQjJCMiIgcng9IjUiIHJ5PSI1IiB0cmFuc2Zvcm09InJvdGF0ZSgxNTAgNTQuMDIgNjUpIi8+PHJlY3Qgd2lkdGg9IjciIGhlaWdodD0iMjAiIHg9IjQ2LjUiIHk9IjQwIiBmaWxsPSIjQkFCOEI5IiByeD0iNSIgcnk9IjUiIHRyYW5zZm9ybT0icm90YXRlKDE4MCA1MCA2NSkiLz48cmVjdCB3aWR0aD0iNyIgaGVpZ2h0PSIyMCIgeD0iNDYuNSIgeT0iNDAiIGZpbGw9IiNDMkMwQzEiIHJ4PSI1IiByeT0iNSIgdHJhbnNmb3JtPSJyb3RhdGUoLTE1MCA0NS45OCA2NSkiLz48cmVjdCB3aWR0aD0iNyIgaGVpZ2h0PSIyMCIgeD0iNDYuNSIgeT0iNDAiIGZpbGw9IiNDQkNCQ0IiIHJ4PSI1IiByeT0iNSIgdHJhbnNmb3JtPSJyb3RhdGUoLTEyMCA0MS4zNCA2NSkiLz48cmVjdCB3aWR0aD0iNyIgaGVpZ2h0PSIyMCIgeD0iNDYuNSIgeT0iNDAiIGZpbGw9IiNEMkQyRDIiIHJ4PSI1IiByeT0iNSIgdHJhbnNmb3JtPSJyb3RhdGUoLTkwIDM1IDY1KSIvPjxyZWN0IHdpZHRoPSI3IiBoZWlnaHQ9IjIwIiB4PSI0Ni41IiB5PSI0MCIgZmlsbD0iI0RBREFEQSIgcng9IjUiIHJ5PSI1IiB0cmFuc2Zvcm09InJvdGF0ZSgtNjAgMjQuMDIgNjUpIi8+PHJlY3Qgd2lkdGg9IjciIGhlaWdodD0iMjAiIHg9IjQ2LjUiIHk9IjQwIiBmaWxsPSIjRTJFMkUyIiByeD0iNSIgcnk9IjUiIHRyYW5zZm9ybT0icm90YXRlKC0zMCAtNS45OCA2NSkiLz48L3N2Zz4=) no-repeat',
+        'background-size': '100%'
+      },
+      imageStyle: {
+        'margin': '6px auto',
+        'width': '40px',
+        'height': '40px',
+        'background': 'transparent no-repeat',
+        'background-size': '100%'
+      },
+      textStyle: {
+        'margin': '0',
+        'font-size': '16px'
+      }
+    });
   }
 
   _createClass(Toast, [{
-    key: "getstyle",
-    value: function getstyle(name) {
-      return {
-        maskStyle: {
-          'position': 'fixed',
-          'z-index': '1000',
-          'top': '0',
-          'right': '0',
-          'left': '0',
-          'bottom': '0'
-        },
-        toastStyle: {
-          'z-index': '5000',
-          'box-sizing': 'border-box',
-          'display': 'flex',
-          'flex-direction': 'column',
-          'justify-content': 'center',
-          '-webkit-justify-content': 'center',
-          'position': 'fixed',
-          'top': '50%',
-          'left': '50%',
-          'min-width': '120px',
-          'max-width': '200px',
-          'min-height': '120px',
-          'padding': '15px',
-          'transform': 'translate(-50%, -50%)',
-          'border-radius': '5px',
-          'text-align': 'center',
-          'line-height': '1.6',
-          'color': '#FFFFFF',
-          'background': 'rgba(17, 17, 17, 0.7)'
-        },
-        successStyle: {
-          'margin': '0',
-          'vertical-align': 'middle',
-          'font-family': 'taro',
-          '-webkit-font-smoothing': 'antialiased',
-          'color': '#FFFFFF',
-          'font-size': '55px',
-          'line-height': '1'
-        },
-        loadingStyle: {
-          'margin': '6px auto',
-          'width': '38px',
-          'height': '38px',
-          '-webkit-animation': 'taroLoading 1s steps(12, end) infinite',
-          'animation': 'taroLoading 1s steps(12, end) infinite',
-          'background': 'transparent url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHBhdGggZmlsbD0ibm9uZSIgZD0iTTAgMGgxMDB2MTAwSDB6Ii8+PHJlY3Qgd2lkdGg9IjciIGhlaWdodD0iMjAiIHg9IjQ2LjUiIHk9IjQwIiBmaWxsPSIjRTlFOUU5IiByeD0iNSIgcnk9IjUiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgLTMwKSIvPjxyZWN0IHdpZHRoPSI3IiBoZWlnaHQ9IjIwIiB4PSI0Ni41IiB5PSI0MCIgZmlsbD0iIzk4OTY5NyIgcng9IjUiIHJ5PSI1IiB0cmFuc2Zvcm09InJvdGF0ZSgzMCAxMDUuOTggNjUpIi8+PHJlY3Qgd2lkdGg9IjciIGhlaWdodD0iMjAiIHg9IjQ2LjUiIHk9IjQwIiBmaWxsPSIjOUI5OTlBIiByeD0iNSIgcnk9IjUiIHRyYW5zZm9ybT0icm90YXRlKDYwIDc1Ljk4IDY1KSIvPjxyZWN0IHdpZHRoPSI3IiBoZWlnaHQ9IjIwIiB4PSI0Ni41IiB5PSI0MCIgZmlsbD0iI0EzQTFBMiIgcng9IjUiIHJ5PSI1IiB0cmFuc2Zvcm09InJvdGF0ZSg5MCA2NSA2NSkiLz48cmVjdCB3aWR0aD0iNyIgaGVpZ2h0PSIyMCIgeD0iNDYuNSIgeT0iNDAiIGZpbGw9IiNBQkE5QUEiIHJ4PSI1IiByeT0iNSIgdHJhbnNmb3JtPSJyb3RhdGUoMTIwIDU4LjY2IDY1KSIvPjxyZWN0IHdpZHRoPSI3IiBoZWlnaHQ9IjIwIiB4PSI0Ni41IiB5PSI0MCIgZmlsbD0iI0IyQjJCMiIgcng9IjUiIHJ5PSI1IiB0cmFuc2Zvcm09InJvdGF0ZSgxNTAgNTQuMDIgNjUpIi8+PHJlY3Qgd2lkdGg9IjciIGhlaWdodD0iMjAiIHg9IjQ2LjUiIHk9IjQwIiBmaWxsPSIjQkFCOEI5IiByeD0iNSIgcnk9IjUiIHRyYW5zZm9ybT0icm90YXRlKDE4MCA1MCA2NSkiLz48cmVjdCB3aWR0aD0iNyIgaGVpZ2h0PSIyMCIgeD0iNDYuNSIgeT0iNDAiIGZpbGw9IiNDMkMwQzEiIHJ4PSI1IiByeT0iNSIgdHJhbnNmb3JtPSJyb3RhdGUoLTE1MCA0NS45OCA2NSkiLz48cmVjdCB3aWR0aD0iNyIgaGVpZ2h0PSIyMCIgeD0iNDYuNSIgeT0iNDAiIGZpbGw9IiNDQkNCQ0IiIHJ4PSI1IiByeT0iNSIgdHJhbnNmb3JtPSJyb3RhdGUoLTEyMCA0MS4zNCA2NSkiLz48cmVjdCB3aWR0aD0iNyIgaGVpZ2h0PSIyMCIgeD0iNDYuNSIgeT0iNDAiIGZpbGw9IiNEMkQyRDIiIHJ4PSI1IiByeT0iNSIgdHJhbnNmb3JtPSJyb3RhdGUoLTkwIDM1IDY1KSIvPjxyZWN0IHdpZHRoPSI3IiBoZWlnaHQ9IjIwIiB4PSI0Ni41IiB5PSI0MCIgZmlsbD0iI0RBREFEQSIgcng9IjUiIHJ5PSI1IiB0cmFuc2Zvcm09InJvdGF0ZSgtNjAgMjQuMDIgNjUpIi8+PHJlY3Qgd2lkdGg9IjciIGhlaWdodD0iMjAiIHg9IjQ2LjUiIHk9IjQwIiBmaWxsPSIjRTJFMkUyIiByeD0iNSIgcnk9IjUiIHRyYW5zZm9ybT0icm90YXRlKC0zMCAtNS45OCA2NSkiLz48L3N2Zz4=) no-repeat',
-          'background-size': '100%'
-        },
-        imageStyle: {
-          'margin': '6px auto',
-          'width': '40px',
-          'height': '40px',
-          'background': 'transparent no-repeat',
-          'background-size': '100%'
-        },
-        textStyle: {
-          'margin': '0',
-          'font-size': '16px'
-        }
-      };
-    }
-  }, {
     key: "create",
     value: function create() {
       var _this = this;
 
       var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-
       // style
-      var _this$getstyle = this.getstyle(),
-          maskStyle = _this$getstyle.maskStyle,
-          toastStyle = _this$getstyle.toastStyle,
-          successStyle = _this$getstyle.successStyle,
-          loadingStyle = _this$getstyle.loadingStyle,
-          imageStyle = _this$getstyle.imageStyle,
-          textStyle = _this$getstyle.textStyle; // configuration
+      var _this$style = this.style,
+          maskStyle = _this$style.maskStyle,
+          toastStyle = _this$style.toastStyle,
+          successStyle = _this$style.successStyle,
+          loadingStyle = _this$style.loadingStyle,
+          imageStyle = _this$style.imageStyle,
+          textStyle = _this$style.textStyle; // configuration
 
+      var config = _objectSpread2({}, this.options, {}, options); // wrapper
 
-      Object.assign(this.options, options);
-      var config = this.options; // wrapper
 
       this.el = document.createElement('div');
       this.el.className = 'taro__toast';
@@ -4527,29 +6273,23 @@ function () {
       this.icon = document.createElement('p');
 
       if (config.image) {
-        this.icon.setAttribute('style', inlineStyle(Object.assign({}, imageStyle, {
+        this.icon.setAttribute('style', inlineStyle(_objectSpread2({}, imageStyle, {
           'background-image': "url(".concat(config.image, ")")
         })));
       } else {
         var iconStyle = config.icon === 'loading' ? loadingStyle : successStyle;
-        if (config.icon === 'none') Object.assign(iconStyle, {
+        this.icon.setAttribute('style', inlineStyle(_objectSpread2({}, iconStyle, {}, config.icon === 'none' ? {
           'display': 'none'
-        });
-        this.icon.setAttribute('style', inlineStyle(iconStyle));
+        } : {})));
         if (config.icon !== 'loading') this.icon.textContent = '';
       } // toast
 
 
       this.toast = document.createElement('div');
-
-      if (config.icon === 'none') {
-        Object.assign(toastStyle, {
-          'min-height': '0',
-          'padding': '10px 15px'
-        });
-      }
-
-      this.toast.setAttribute('style', inlineStyle(toastStyle)); // title
+      this.toast.setAttribute('style', inlineStyle(_objectSpread2({}, toastStyle, {}, config.icon === 'none' ? {
+        'min-height': '0',
+        'padding': '10px 15px'
+      } : {}))); // title
 
       this.title = document.createElement('p');
       this.title.setAttribute('style', inlineStyle(textStyle));
@@ -4584,56 +6324,42 @@ function () {
       var _this2 = this;
 
       var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-      var config = this.options;
+
+      var config = _objectSpread2({}, this.options, {}, options);
+
       if (this.hideOpacityTimer) clearTimeout(this.hideOpacityTimer);
       if (this.hideDisplayTimer) clearTimeout(this.hideDisplayTimer); // title
 
-      if (config.title !== options.title) this.title.textContent = options.title; // mask
+      this.title.textContent = config.title || ''; // mask
 
-      if (config.mask !== options.mask) this.mask.style.display = options.mask ? 'block' : 'none'; // image
+      this.mask.style.display = config.mask ? 'block' : 'none'; // image
 
-      var _this$getstyle2 = this.getstyle(),
-          toastStyle = _this$getstyle2.toastStyle,
-          successStyle = _this$getstyle2.successStyle,
-          loadingStyle = _this$getstyle2.loadingStyle,
-          imageStyle = _this$getstyle2.imageStyle;
+      var _this$style2 = this.style,
+          toastStyle = _this$style2.toastStyle,
+          successStyle = _this$style2.successStyle,
+          loadingStyle = _this$style2.loadingStyle,
+          imageStyle = _this$style2.imageStyle;
 
-      if (config.image !== options.image) {
-        if (options.image) {
-          this.icon.setAttribute('style', inlineStyle(Object.assign({}, imageStyle, {
-            'background-image': "url(".concat(options.image, ")")
-          })));
-          this.icon.textContent = '';
-        } else {
-          var iconStyle = options.icon === 'loading' ? loadingStyle : successStyle;
-          if (options.icon === 'none') Object.assign(iconStyle, {
-            'display': 'none'
-          });
-          this.icon.setAttribute('style', inlineStyle(iconStyle));
-          this.icon.textContent = options.icon === 'loading' ? '' : '';
-        }
+      if (config.image) {
+        this.icon.setAttribute('style', inlineStyle(_objectSpread2({}, imageStyle, {
+          'background-image': "url(".concat(config.image, ")")
+        })));
+        this.icon.textContent = '';
       } else {
-        if (!options.image && config.icon !== options.icon) {
-          var _iconStyle = options.icon === 'loading' ? loadingStyle : successStyle;
-
-          if (options.icon === 'none') Object.assign(_iconStyle, {
+        if (!config.image && config.icon) {
+          var iconStyle = config.icon === 'loading' ? loadingStyle : successStyle;
+          this.icon.setAttribute('style', inlineStyle(_objectSpread2({}, iconStyle, {}, config.icon === 'none' ? {
             'display': 'none'
-          });
-          this.icon.setAttribute('style', inlineStyle(_iconStyle));
-          this.icon.textContent = options.icon === 'loading' ? '' : '';
+          } : {})));
+          this.icon.textContent = config.icon === 'loading' ? '' : '';
         }
       } // toast
 
 
-      if (options.icon === 'none') {
-        Object.assign(toastStyle, {
-          'min-height': '0',
-          'padding': '10px 15px'
-        });
-      }
-
-      this.toast.setAttribute('style', inlineStyle(toastStyle));
-      Object.assign(config, options); // show
+      this.toast.setAttribute('style', inlineStyle(_objectSpread2({}, toastStyle, {}, config.icon === 'none' ? {
+        'min-height': '0',
+        'padding': '10px 15px'
+      } : {}))); // show
 
       this.el.style.display = 'block';
       setTimeout(function () {
@@ -4675,15 +6401,15 @@ function () {
   return Toast;
 }();
 
+var noop$1 = function noop() {};
+
 var Modal =
 /*#__PURE__*/
 function () {
   function Modal() {
     _classCallCheck(this, Modal);
 
-    var noop = function noop() {};
-
-    this.options = {
+    _defineProperty(this, "options", {
       title: '',
       content: '',
       showCancel: true,
@@ -4691,83 +6417,78 @@ function () {
       cancelColor: '#000000',
       confirmText: '确定',
       confirmColor: '#3CC51F',
-      success: noop,
-      fail: noop,
-      complete: noop
-    };
+      success: noop$1,
+      fail: noop$1,
+      complete: noop$1
+    });
+
+    _defineProperty(this, "style", {
+      maskStyle: {
+        'position': 'fixed',
+        'z-index': '1000',
+        'top': '0',
+        'right': '0',
+        'left': '0',
+        'bottom': '0',
+        'background': 'rgba(0,0,0,0.6)'
+      },
+      modalStyle: {
+        'z-index': '4999',
+        'position': 'fixed',
+        'top': '50%',
+        'left': '50%',
+        'transform': 'translate(-50%, -50%)',
+        'width': '80%',
+        'max-width': '300px',
+        'border-radius': '3px',
+        'text-align': 'center',
+        'line-height': '1.6',
+        'overflow': 'hidden',
+        'background': '#FFFFFF'
+      },
+      titleStyle: {
+        'padding': '20px 24px 9px',
+        'font-size': '18px'
+      },
+      textStyle: {
+        'padding': '0 24px 12px',
+        'min-height': '40px',
+        'font-size': '15px',
+        'line-height': '1.3',
+        'color': '#808080'
+      },
+      footStyle: {
+        'position': 'relative',
+        'line-height': '48px',
+        'font-size': '18px',
+        'display': 'flex'
+      },
+      btnStyle: {
+        'position': 'relative',
+        '-webkit-box-flex': '1',
+        '-webkit-flex': '1',
+        'flex': '1'
+      }
+    });
   }
 
   _createClass(Modal, [{
-    key: "getstyle",
-    value: function getstyle(name) {
-      return {
-        maskStyle: {
-          'position': 'fixed',
-          'z-index': '1000',
-          'top': '0',
-          'right': '0',
-          'left': '0',
-          'bottom': '0',
-          'background': 'rgba(0,0,0,0.6)'
-        },
-        modalStyle: {
-          'z-index': '4999',
-          'position': 'fixed',
-          'top': '50%',
-          'left': '50%',
-          'transform': 'translate(-50%, -50%)',
-          'width': '80%',
-          'max-width': '300px',
-          'border-radius': '3px',
-          'text-align': 'center',
-          'line-height': '1.6',
-          'overflow': 'hidden',
-          'background': '#FFFFFF'
-        },
-        titleStyle: {
-          'padding': '20px 24px 9px',
-          'font-size': '18px'
-        },
-        textStyle: {
-          'padding': '0 24px 12px',
-          'min-height': '40px',
-          'font-size': '15px',
-          'line-height': '1.3',
-          'color': '#808080'
-        },
-        footStyle: {
-          'position': 'relative',
-          'line-height': '48px',
-          'font-size': '18px',
-          'display': 'flex'
-        },
-        btnStyle: {
-          'position': 'relative',
-          '-webkit-box-flex': '1',
-          '-webkit-flex': '1',
-          'flex': '1'
-        }
-      };
-    }
-  }, {
     key: "create",
     value: function create() {
       var _this = this;
 
       var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-
       // style
-      var _this$getstyle = this.getstyle(),
-          maskStyle = _this$getstyle.maskStyle,
-          modalStyle = _this$getstyle.modalStyle,
-          titleStyle = _this$getstyle.titleStyle,
-          textStyle = _this$getstyle.textStyle,
-          footStyle = _this$getstyle.footStyle,
-          btnStyle = _this$getstyle.btnStyle; // configuration
+      var _this$style = this.style,
+          maskStyle = _this$style.maskStyle,
+          modalStyle = _this$style.modalStyle,
+          titleStyle = _this$style.titleStyle,
+          textStyle = _this$style.textStyle,
+          footStyle = _this$style.footStyle,
+          btnStyle = _this$style.btnStyle; // configuration
 
+      var config = _objectSpread2({}, this.options, {}, options); // wrapper
 
-      Object.assign(this.options, options);
-      var config = this.options; // wrapper
 
       this.el = document.createElement('div');
       this.el.className = 'taro__modal';
@@ -4780,14 +6501,14 @@ function () {
       var modal = document.createElement('div');
       modal.setAttribute('style', inlineStyle(modalStyle)); // title
 
-      var titleCSS = config.title ? titleStyle : Object.assign({}, titleStyle, {
+      var titleCSS = config.title ? titleStyle : _objectSpread2({}, titleStyle, {
         display: 'none'
       });
       this.title = document.createElement('div');
       this.title.setAttribute('style', inlineStyle(titleCSS));
       this.title.textContent = config.title; // text
 
-      var textCSS = config.title ? textStyle : Object.assign({}, textStyle, {
+      var textCSS = config.title ? textStyle : _objectSpread2({}, textStyle, {
         padding: '40px 20px 26px',
         color: '#353535'
       });
@@ -4799,10 +6520,11 @@ function () {
       foot.className = 'taro-modal__foot';
       foot.setAttribute('style', inlineStyle(footStyle)); // cancel button
 
-      var cancelCSS = Object.assign({}, btnStyle, {
+      var cancelCSS = _objectSpread2({}, btnStyle, {
         color: config.cancelColor,
         display: config.showCancel ? 'block' : 'none'
       });
+
       this.cancel = document.createElement('div');
       this.cancel.className = 'taro-model__btn';
       this.cancel.setAttribute('style', inlineStyle(cancelCSS));
@@ -4871,43 +6593,42 @@ function () {
       var _this2 = this;
 
       var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-      var config = this.options;
+
+      var config = _objectSpread2({}, this.options, {}, options);
+
       if (this.hideOpacityTimer) clearTimeout(this.hideOpacityTimer);
       if (this.hideDisplayTimer) clearTimeout(this.hideDisplayTimer); // title & text
 
-      var _this$getstyle2 = this.getstyle(),
-          textStyle = _this$getstyle2.textStyle;
+      var textStyle = this.style.textStyle;
 
-      if (config.title !== options.title) {
-        this.title.textContent = options.title;
+      if (config.title) {
+        this.title.textContent = config.title; // none => block
 
-        if (!options.title) {
-          // block => none
-          this.title.style.display = 'none';
-          var textCSS = Object.assign({}, textStyle, {
-            padding: '40px 20px 26px',
-            color: '#353535'
-          });
-          this.text.setAttribute('style', inlineStyle(textCSS));
-        } else if (!config.title) {
-          // none => block
-          this.title.style.display = 'block';
-          this.text.setAttribute('style', inlineStyle(textStyle));
-        }
+        this.title.style.display = 'block';
+        this.text.setAttribute('style', inlineStyle(textStyle));
+      } else {
+        // block => none
+        this.title.style.display = 'none';
+
+        var textCSS = _objectSpread2({}, textStyle, {
+          padding: '40px 20px 26px',
+          color: '#353535'
+        });
+
+        this.text.setAttribute('style', inlineStyle(textCSS));
       }
 
-      if (config.content !== options.content) this.text.textContent = options.content; // showCancel
+      this.text.textContent = config.content || ''; // showCancel
 
-      if (config.showCancel !== options.showCancel) this.cancel.style.display = options.showCancel ? 'block' : 'none'; // cancelText
+      this.cancel.style.display = config.showCancel ? 'block' : 'none'; // cancelText
 
-      if (config.cancelText !== options.cancelText) this.cancel.textContent = options.cancelText; // cancelColor
+      this.cancel.textContent = config.cancelText || ''; // cancelColor
 
-      if (config.cancelColor !== options.cancelColor) this.cancel.style.color = options.cancelColor; // confirmText
+      this.cancel.style.color = config.cancelColor || undefined; // confirmText
 
-      if (config.confirmText !== options.confirmText) this.confirm.textContent = options.confirmText; // confirmColor
+      this.confirm.textContent = config.confirmText || ''; // confirmColor
 
-      if (config.confirmColor !== options.confirmColor) this.confirm.style.color = options.confirmColor;
-      Object.assign(config, options); // cbs
+      this.confirm.style.color = config.confirmColor || undefined; // cbs
 
       this.cancel.onclick = function () {
         _this2.hide();
@@ -4959,86 +6680,84 @@ function () {
   return Modal;
 }();
 
+var noop$2 = function noop() {};
+
 var ActionSheet =
 /*#__PURE__*/
 function () {
   function ActionSheet() {
     _classCallCheck(this, ActionSheet);
 
-    var noop = function noop() {};
-
-    this.options = {
+    _defineProperty(this, "options", {
       itemList: [],
       itemColor: '#000000',
-      success: noop,
-      fail: noop,
-      complete: noop
-    };
+      success: noop$2,
+      fail: noop$2,
+      complete: noop$2
+    });
+
+    _defineProperty(this, "style", {
+      maskStyle: {
+        'position': 'fixed',
+        'z-index': '1000',
+        'top': '0',
+        'right': '0',
+        'left': '0',
+        'bottom': '0',
+        'background': 'rgba(0,0,0,0.6)'
+      },
+      actionSheetStyle: {
+        'z-index': '4999',
+        'position': 'fixed',
+        'left': '0',
+        'bottom': '0',
+        '-webkit-transform': 'translate(0, 100%)',
+        'transform': 'translate(0, 100%)',
+        'width': '100%',
+        'line-height': '1.6',
+        'background': '#EFEFF4',
+        '-webkit-transition': '-webkit-transform .3s',
+        'transition': 'transform .3s'
+      },
+      menuStyle: {
+        'background-color': '#FCFCFD'
+      },
+      cellStyle: {
+        'position': 'relative',
+        'padding': '10px 0',
+        'text-align': 'center',
+        'font-size': '18px'
+      },
+      cancelStyle: {
+        'margin-top': '6px',
+        'padding': '10px 0',
+        'text-align': 'center',
+        'font-size': '18px',
+        'color': '#000000',
+        'background-color': '#FCFCFD'
+      }
+    });
+
+    _defineProperty(this, "lastConfig", {});
   }
 
   _createClass(ActionSheet, [{
-    key: "getStyle",
-    value: function getStyle() {
-      return {
-        maskStyle: {
-          'position': 'fixed',
-          'z-index': '1000',
-          'top': '0',
-          'right': '0',
-          'left': '0',
-          'bottom': '0',
-          'background': 'rgba(0,0,0,0.6)'
-        },
-        actionSheetStyle: {
-          'z-index': '4999',
-          'position': 'fixed',
-          'left': '0',
-          'bottom': '0',
-          '-webkit-transform': 'translate(0, 100%)',
-          'transform': 'translate(0, 100%)',
-          'width': '100%',
-          'line-height': '1.6',
-          'background': '#EFEFF4',
-          '-webkit-transition': '-webkit-transform .3s',
-          'transition': 'transform .3s'
-        },
-        menuStyle: {
-          'background-color': '#FCFCFD'
-        },
-        cellStyle: {
-          'position': 'relative',
-          'padding': '10px 0',
-          'text-align': 'center',
-          'font-size': '18px'
-        },
-        cancelStyle: {
-          'margin-top': '6px',
-          'padding': '10px 0',
-          'text-align': 'center',
-          'font-size': '18px',
-          'color': '#000000',
-          'background-color': '#FCFCFD'
-        }
-      };
-    }
-  }, {
     key: "create",
     value: function create() {
       var _this = this;
 
       var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-
       // style
-      var _this$getStyle = this.getStyle(),
-          maskStyle = _this$getStyle.maskStyle,
-          actionSheetStyle = _this$getStyle.actionSheetStyle,
-          menuStyle = _this$getStyle.menuStyle,
-          cellStyle = _this$getStyle.cellStyle,
-          cancelStyle = _this$getStyle.cancelStyle; // configuration
+      var _this$style = this.style,
+          maskStyle = _this$style.maskStyle,
+          actionSheetStyle = _this$style.actionSheetStyle,
+          menuStyle = _this$style.menuStyle,
+          cellStyle = _this$style.cellStyle,
+          cancelStyle = _this$style.cancelStyle; // configuration
 
+      var config = _objectSpread2({}, this.options, {}, options);
 
-      Object.assign(this.options, options);
-      var config = this.options; // wrapper
+      this.lastConfig = config; // wrapper
 
       this.el = document.createElement('div');
       this.el.className = 'taro__actionSheet';
@@ -5052,11 +6771,11 @@ function () {
       this.actionSheet.setAttribute('style', inlineStyle(actionSheetStyle)); // menu
 
       this.menu = document.createElement('div');
-      this.menu.setAttribute('style', inlineStyle(Object.assign({}, menuStyle, {
+      this.menu.setAttribute('style', inlineStyle(_objectSpread2({}, menuStyle, {
         color: config.itemColor
       }))); // cells
 
-      this.cells = options.itemList.map(function (item, index) {
+      this.cells = config.itemList.map(function (item, index) {
         var cell = document.createElement('div');
         cell.className = 'taro-actionsheet__cell';
         cell.setAttribute('style', inlineStyle(cellStyle));
@@ -5113,48 +6832,49 @@ function () {
       var _this2 = this;
 
       var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-      var config = this.options;
+
+      var config = _objectSpread2({}, this.options, {}, options);
+
+      this.lastConfig = config;
       if (this.hideOpacityTimer) clearTimeout(this.hideOpacityTimer);
       if (this.hideDisplayTimer) clearTimeout(this.hideDisplayTimer); // itemColor
 
-      if (config.itemColor !== options.itemColor) this.menu.style.color = options.itemColor;
-      Object.assign(config, options); // cells
+      if (config.itemColor) this.menu.style.color = config.itemColor; // cells
 
-      var _this$getStyle2 = this.getStyle(),
-          cellStyle = _this$getStyle2.cellStyle;
+      var cellStyle = this.style.cellStyle;
+      config.itemList.forEach(function (item, index) {
+        var cell;
 
-      options.itemList.forEach(function (item, index) {
         if (_this2.cells[index]) {
-          if (_this2.cells[index].textContent === item) ; else {
-            // assign new content
-            _this2.cells[index].textContent = item;
-          }
+          // assign new content
+          cell = _this2.cells[index];
         } else {
           // create new cell
-          var cell = document.createElement('div');
+          cell = document.createElement('div');
           cell.className = 'taro-actionsheet__cell';
           cell.setAttribute('style', inlineStyle(cellStyle));
-          cell.textContent = item;
           cell.dataset.tapIndex = index;
-
-          cell.onclick = function (e) {
-            return _this2.onCellClick(e);
-          };
 
           _this2.cells.push(cell);
 
           _this2.menu.appendChild(cell);
         }
+
+        cell.textContent = item;
+
+        cell.onclick = function (e) {
+          return _this2.onCellClick(e);
+        };
       });
       var cellsLen = this.cells.length;
-      var itemListLen = options.itemList.length;
+      var itemListLen = config.itemList.length;
 
       if (cellsLen > itemListLen) {
         for (var i = itemListLen; i < cellsLen; i++) {
           this.menu.removeChild(this.cells[i]);
         }
 
-        this.cells.splice(itemListLen, cellsLen - itemListLen);
+        this.cells.splice(itemListLen);
       } // show
 
 
@@ -5172,12 +6892,13 @@ function () {
     key: "onCellClick",
     value: function onCellClick(e) {
       this.hide();
+      console.log('click');
       var res = {
         errMsg: 'showActionSheet:ok',
         tapIndex: +e.currentTarget.dataset.tapIndex
       };
-      this.options.success(res);
-      this.options.complete(res);
+      this.lastConfig.success && this.lastConfig.success(res);
+      this.lastConfig.complete && this.lastConfig.complete(res);
       this.resolveHandler(res);
     }
   }, {
@@ -5471,37 +7192,8 @@ taro.eventCenter.on('__taroRouterChange', function () {
   hideModal();
 });
 
-function styleInject(css, ref) {
-  if (ref === void 0) ref = {};
-  var insertAt = ref.insertAt;
-
-  if (!css || typeof document === 'undefined') {
-    return;
-  }
-
-  var head = document.head || document.getElementsByTagName('head')[0];
-  var style = document.createElement('style');
-  style.type = 'text/css';
-
-  if (insertAt === 'top') {
-    if (head.firstChild) {
-      head.insertBefore(style, head.firstChild);
-    } else {
-      head.appendChild(style);
-    }
-  } else {
-    head.appendChild(style);
-  }
-
-  if (style.styleSheet) {
-    style.styleSheet.cssText = css;
-  } else {
-    style.appendChild(document.createTextNode(css));
-  }
-}
-
-var css = ".taro_chooselocation {\r\n  position: fixed;\r\n  display: flex;\r\n  flex-direction: column;\r\n  width: 100%;\r\n  height: 100%;\r\n  top: 100%;\r\n  background-color: #fff;\r\n  transition: ease top .3s;\r\n}\r\n\r\n.taro_chooselocation_bar {\r\n  display: flex;\r\n  flex: 0 95px;\r\n  height: 95px;\r\n  background-color: #ededed;\r\n  color: #090909;\r\n}\r\n\r\n.taro_chooselocation_back {\r\n  flex: 0 45px;\r\n  position: relative;\r\n  width: 33px;\r\n  height: 30px;\r\n  margin-top: 30px;\r\n}\r\n\r\n.taro_chooselocation_back::before {\r\n  content: '';\r\n  position: absolute;\r\n  top: 0;\r\n  left: 0;\r\n  display: block;\r\n  width: 0;\r\n  height: 0;\r\n  border: solid 15px;\r\n  border-top-color: transparent;\r\n  border-right-color: #090909;\r\n  border-bottom-color: transparent;\r\n  border-left-color: transparent;\r\n}\r\n\r\n.taro_chooselocation_back::after {\r\n  content: '';\r\n  position: absolute;\r\n  display: block;\r\n  width: 0;\r\n  height: 0;\r\n  top: 0;\r\n  left: 3px;\r\n  border: solid 15px;\r\n  border-top-color: transparent;\r\n  border-right-color: #ededed;\r\n  border-bottom-color: transparent;\r\n  border-left-color: transparent;\r\n}\r\n\r\n.taro_chooselocation_title {\r\n  flex: 1;\r\n  line-height: 95px;\r\n  padding-left: 30px;\r\n}\r\n\r\n.taro_chooselocation_submit {\r\n  width: 110px;\r\n  height: 60px;\r\n  color: #fff;\r\n  background-color: #08bf62;\r\n  border: none;\r\n  font-size: 28px;\r\n  line-height: 60px;\r\n  padding: 0;\r\n  margin: 18px 30px 0 0;\r\n}\r\n\r\n.taro_chooselocation_frame {\r\n  flex: 1;\r\n}";
-styleInject(css);
+var css$1 = ".taro_chooselocation {\r\n  position: fixed;\r\n  display: flex;\r\n  flex-direction: column;\r\n  width: 100%;\r\n  height: 100%;\r\n  top: 100%;\r\n  background-color: #fff;\r\n  transition: ease top .3s;\r\n}\r\n\r\n.taro_chooselocation_bar {\r\n  display: flex;\r\n  flex: 0 95px;\r\n  height: 95px;\r\n  background-color: #ededed;\r\n  color: #090909;\r\n}\r\n\r\n.taro_chooselocation_back {\r\n  flex: 0 45px;\r\n  position: relative;\r\n  width: 33px;\r\n  height: 30px;\r\n  margin-top: 30px;\r\n}\r\n\r\n.taro_chooselocation_back::before {\r\n  content: '';\r\n  position: absolute;\r\n  top: 0;\r\n  left: 0;\r\n  display: block;\r\n  width: 0;\r\n  height: 0;\r\n  border: solid 15px;\r\n  border-top-color: transparent;\r\n  border-right-color: #090909;\r\n  border-bottom-color: transparent;\r\n  border-left-color: transparent;\r\n}\r\n\r\n.taro_chooselocation_back::after {\r\n  content: '';\r\n  position: absolute;\r\n  display: block;\r\n  width: 0;\r\n  height: 0;\r\n  top: 0;\r\n  left: 3px;\r\n  border: solid 15px;\r\n  border-top-color: transparent;\r\n  border-right-color: #ededed;\r\n  border-bottom-color: transparent;\r\n  border-left-color: transparent;\r\n}\r\n\r\n.taro_chooselocation_title {\r\n  flex: 1;\r\n  line-height: 95px;\r\n  padding-left: 30px;\r\n}\r\n\r\n.taro_chooselocation_submit {\r\n  width: 110px;\r\n  height: 60px;\r\n  color: #fff;\r\n  background-color: #08bf62;\r\n  border: none;\r\n  font-size: 28px;\r\n  line-height: 60px;\r\n  padding: 0;\r\n  margin: 18px 30px 0 0;\r\n}\r\n\r\n.taro_chooselocation_frame {\r\n  flex: 1;\r\n}";
+styleInject(css$1);
 
 /** @type {LocationChooser} */
 
@@ -5554,20 +7246,20 @@ function (_Taro$Component) {
   _createClass(LocationChooser, [{
     key: "render",
     value: function render() {
-      return Nerv.createPortal(Nerv.createElement("div", {
+      return Nerv__default.createPortal(Nerv__default.createElement("div", {
         className: "taro_chooselocation",
         ref: this.getWrapRef
-      }, Nerv.createElement("div", {
+      }, Nerv__default.createElement("div", {
         className: "taro_chooselocation_bar"
-      }, Nerv.createElement("div", {
+      }, Nerv__default.createElement("div", {
         className: "taro_chooselocation_back",
         onClick: this.onBack
-      }), Nerv.createElement("p", {
+      }), Nerv__default.createElement("p", {
         className: "taro_chooselocation_title"
-      }, "\u4F4D\u7F6E"), Nerv.createElement("button", {
+      }, "\u4F4D\u7F6E"), Nerv__default.createElement("button", {
         className: "taro_chooselocation_submit",
         onClick: this.onSubmit
-      }, "\u5B8C\u6210")), Nerv.createElement("iframe", {
+      }, "\u5B8C\u6210")), Nerv__default.createElement("iframe", {
         className: "taro_chooselocation_frame",
         frameborder: "0",
         src: "https://apis.map.qq.com/tools/locpicker?search=1&type=1&key=".concat(LOCATION_APIKEY, "&referer=myapp")
@@ -5598,9 +7290,9 @@ function (_Taro$Component) {
 /**
  * 打开地图选择位置。
  * @param {Object} object 参数
- * @param {(obj: LocationObject) => void} [success] 接口调用成功的回调函数
- * @param {Function} [fail] 接口调用失败的回调函数
- * @param {Function} [complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ * @param {(obj: LocationObject) => void} [object.success] 接口调用成功的回调函数
+ * @param {Function} [object.fail] 接口调用失败的回调函数
+ * @param {Function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
  */
 
 
@@ -5611,6 +7303,7 @@ var chooseLocation = function chooseLocation() {
       complete = _ref.complete;
 
   return new Promise(function (resolve, reject) {
+    var div = document.createElement('div');
     var choosenLocation = {};
 
     var onSuccess = function onSuccess(res) {
@@ -5633,7 +7326,7 @@ var chooseLocation = function chooseLocation() {
       });
     }
 
-    Nerv.render(Nerv.createElement(LocationChooser, {
+    Nerv__default.render(Nerv__default.createElement(LocationChooser, {
       handler: function handler(res) {
         if (res) {
           onError(res);
@@ -5651,10 +7344,10 @@ var chooseLocation = function chooseLocation() {
 
         window.removeEventListener('message', onMessage, false);
         setTimeout(function () {
-          Nerv.unmountComponentAtNode(document.body);
+          Nerv__default.unmountComponentAtNode(div);
         }, 300);
       }
-    }), document.body);
+    }), div);
 
     var onMessage = function onMessage(event) {
       // 接收位置信息，用户选择确认位置点后选点组件会触发该事件，回传用户的位置信息
@@ -5742,6 +7435,12 @@ function setNavigationBarColor(options) {
   document.head.appendChild(meta);
 }
 
+var requestPayment = processOpenapi('chooseWXPay', undefined, undefined, function (options) {
+  return Object.assign(options, {
+    timestamp: Number.parseInt(options.timeStamp, 10)
+  });
+});
+
 var toByteArray_1 = toByteArray;
 var fromByteArray_1 = fromByteArray;
 var lookup = [];
@@ -5749,9 +7448,9 @@ var revLookup = [];
 var Arr = typeof Uint8Array !== 'undefined' ? Uint8Array : Array;
 var code = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
-for (var i = 0, len = code.length; i < len; ++i) {
-  lookup[i] = code[i];
-  revLookup[code.charCodeAt(i)] = i;
+for (var i$1 = 0, len = code.length; i$1 < len; ++i$1) {
+  lookup[i$1] = code[i$1];
+  revLookup[code.charCodeAt(i$1)] = i$1;
 } // Support decoding URL-safe base64 strings, as Node.js does.
 // See: https://en.wikipedia.org/wiki/Base64#URL_applications
 
@@ -6171,7 +7870,7 @@ var canUsePromise = function () {
   return 'Promise' in win && _typeof$1(isFunction$2(Promise));
 }();
 
-var noop = function noop() {};
+var noop$3 = function noop() {};
 
 var encodeC = encodeURIComponent;
 var doc = win.document;
@@ -6215,7 +7914,7 @@ function jsonp$1(url, opts, cb) {
 
   opts = objectAssign$1({}, defaultConfig, opts);
   url = url || opts.url;
-  cb = cb || noop;
+  cb = cb || noop$3;
 
   if (!url || typeof url !== 'string') {
     cb(new Error('Param url is needed!'));
@@ -6358,7 +8057,7 @@ function fetchData(url, opts, cb) {
       script.parentNode.removeChild(script);
     }
 
-    win[funcId] = noop;
+    win[funcId] = noop$3;
     clearTimeout(win['timer_' + funcId]);
   }
 }
@@ -7187,10 +8886,6 @@ var pageScrollTo = function pageScrollTo(_ref) {
     }
   });
 };
-
-function createCommonjsModule(fn, module) {
-	return module = { exports: {} }, fn(module, module.exports), module.exports;
-}
 
 var mobileDetect = createCommonjsModule(function (module) {
 // THIS FILE IS GENERATED - DO NOT EDIT!
@@ -8274,6 +9969,15 @@ function initTabBarApis() {
   tabConf = _App.state.__tabs;
   App = _App;
 }
+/**
+ * 跳转到 tabBar 页面，并关闭其他所有非 tabBar 页面
+ * @param {Object} options
+ * @param {string} options.url 需要跳转的 tabBar 页面的路径（需在 app.json 的 tabBar 字段定义的页面），路径后不能带参数。
+ * @param {function} [options.success] 接口调用成功的回调函数
+ * @param {function} [options.fail] 接口调用失败的回调函数
+ * @param {function} [options.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
 function switchTab() {
   var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
   // options must be an Object
@@ -8307,6 +10011,16 @@ function switchTab() {
     });
   });
 }
+/**
+ * 为 tabBar 某一项的右上角添加文本
+ * @param {Object} options
+ * @param {number} options.index tabBar 的哪一项，从左边算起
+ * @param {string} options.text 显示的文本，超过 4 个字符则显示成 ...
+ * @param {function} [options.success] 接口调用成功的回调函数
+ * @param {function} [options.fail] 接口调用失败的回调函数
+ * @param {function} [options.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
 function setTabBarBadge() {
   var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
   // options must be an Object
@@ -8345,7 +10059,7 @@ function setTabBarBadge() {
       name: 'setTabBarBadge',
       para: 'text',
       correct: 'String',
-      wrong: index
+      wrong: text
     });
     console.error(res.errMsg);
     return errorHandler(fail, complete)(res);
@@ -8359,6 +10073,15 @@ function setTabBarBadge() {
   });
   return successHandler(success, complete)(res);
 }
+/**
+ * 移除 tabBar 某一项右上角的文本
+ * @param {Object} options
+ * @param {number} options.index tabBar 的哪一项，从左边算起
+ * @param {function} [options.success] 接口调用成功的回调函数
+ * @param {function} [options.fail] 接口调用失败的回调函数
+ * @param {function} [options.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
 function removeTabBarBadge() {
   var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
   // options must be an Object
@@ -8398,6 +10121,15 @@ function removeTabBarBadge() {
   });
   return successHandler(success, complete)(res);
 }
+/**
+ * 显示 tabBar 某一项的右上角的红点
+ * @param {Object} options
+ * @param {number} options.index tabBar 的哪一项，从左边算起
+ * @param {function} [options.success] 接口调用成功的回调函数
+ * @param {function} [options.fail] 接口调用失败的回调函数
+ * @param {function} [options.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
 function showTabBarRedDot() {
   var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
   // options must be an Object
@@ -8437,6 +10169,15 @@ function showTabBarRedDot() {
   });
   return successHandler(success, complete)(res);
 }
+/**
+ * 隐藏 tabBar 某一项的右上角的红点
+ * @param {Object} options
+ * @param {number} options.index tabBar 的哪一项，从左边算起
+ * @param {function} [options.success] 接口调用成功的回调函数
+ * @param {function} [options.fail] 接口调用失败的回调函数
+ * @param {function} [options.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
 function hideTabBarRedDot() {
   var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
   // options must be an Object
@@ -8476,6 +10217,15 @@ function hideTabBarRedDot() {
   });
   return successHandler(success, complete)(res);
 }
+/**
+ * 显示 tabBar
+ * @param {Object} options
+ * @param {boolean} [options.animation=false] 是否需要动画效果
+ * @param {function} [options.success] 接口调用成功的回调函数
+ * @param {function} [options.fail] 接口调用失败的回调函数
+ * @param {function} [options.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
 function showTabBar() {
   var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
   // options must be an Object
@@ -8515,6 +10265,15 @@ function showTabBar() {
   });
   return successHandler(success, complete)(res);
 }
+/**
+ * 隐藏 tabBar
+ * @param {Object} options
+ * @param {boolean} [options.animation=false] 是否需要动画效果
+ * @param {function} [options.success] 接口调用成功的回调函数
+ * @param {function} [options.fail] 接口调用失败的回调函数
+ * @param {function} [options.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
 function hideTabBar() {
   var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
   // options must be an Object
@@ -8554,6 +10313,18 @@ function hideTabBar() {
   });
   return successHandler(success, complete)(res);
 }
+/**
+ * 动态设置 tabBar 的整体样式
+ * @param {Object} options 
+ * @param {string} options.color tab 上的文字默认颜色，HexColor
+ * @param {string} options.selectedColor tab 上的文字选中时的颜色，HexColor
+ * @param {string} options.backgroundColor tab 的背景色，HexColor
+ * @param {'black'|'white'} options.borderStyle tabBar上边框的颜色， 仅支持 black/white
+ * @param {function} [options.success] 接口调用成功的回调函数
+ * @param {function} [options.fail] 接口调用失败的回调函数
+ * @param {function} [options.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
 function setTabBarStyle() {
   var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
   // options must be an Object
@@ -8610,6 +10381,18 @@ function setTabBarStyle() {
   });
   return successHandler(success, complete)(res);
 }
+/**
+ * 动态设置 tabBar 某一项的内容
+ * @param {Object} options 
+ * @param {number} options.index tabBar 的哪一项，从左边算起
+ * @param {string} [options.text] tab 上的按钮文字
+ * @param {string} [options.iconPath] 图片路径，icon 大小限制为 40kb，建议尺寸为 81px * 81px，当 postion 为 top 时，此参数无效，不支持网络图片
+ * @param {string} [options.selectedIconPath] 选中时的图片路径，icon 大小限制为 40kb，建议尺寸为 81px * 81px ，当 postion 为 top 时，此参数无效
+ * @param {function} [options.success] 接口调用成功的回调函数
+ * @param {function} [options.fail] 接口调用失败的回调函数
+ * @param {function} [options.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
 function setTabBarItem() {
   var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
   // options must be an Object
@@ -8661,6 +10444,58 @@ function setTabBarItem() {
   });
   return successHandler(success, complete)(res);
 }
+
+var vibrator = window.navigator.vibrate;
+/**
+ * 使手机发生较短时间的振动（15 ms）。仅在 iPhone 7 / 7 Plus 以上及 Android 机型生效
+ * @param {Object} object 参数
+ * @param {function} [object.success] 接口调用成功的回调函数
+ * @param {function} [object.fail] 接口调用失败的回调函数
+ * @param {function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
+var vibrateShort = function vibrateShort() {
+  var _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+      success = _ref.success,
+      fail = _ref.fail,
+      complete = _ref.complete;
+
+  if (vibrator) {
+    vibrator(15);
+    return successHandler(success, complete)({
+      errMsg: 'vibrateShort:ok'
+    });
+  } else {
+    return errorHandler(fail, complete)({
+      errMsg: 'vibrateShort:fail'
+    });
+  }
+};
+/**
+ * 使手机发生较长时间的振动（400 ms)
+ * @param {Object} object 参数
+ * @param {function} [object.success] 接口调用成功的回调函数
+ * @param {function} [object.fail] 接口调用失败的回调函数
+ * @param {function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
+ */
+
+var vibrateLong = function vibrateLong() {
+  var _ref2 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+      success = _ref2.success,
+      fail = _ref2.fail,
+      complete = _ref2.complete;
+
+  if (vibrator) {
+    vibrator(400);
+    return successHandler(success, complete)({
+      errMsg: 'vibrateLong:ok'
+    });
+  } else {
+    return errorHandler(fail, complete)({
+      errMsg: 'vibrateLong:fail'
+    });
+  }
+};
 
 /**
  * @typedef {Object} ChooseVideoParam
@@ -8729,7 +10564,8 @@ function chooseVideo(options) {
   taroChooseVideo.dispatchEvent(TaroMouseEvents);
 
   taroChooseVideo.onchange = function (e) {
-    var arr = Array.from(e.target.files);
+    var arr = _toConsumableArray(e.target.files);
+
     arr && arr.forEach(function (item) {
       var blob = new Blob([item]);
       var url = URL.createObjectURL(blob);
@@ -8976,13 +10812,57 @@ function onSocketClose() {
   console.warn('Deprecated.Please use socketTask.onClose instead.');
 }
 
+var callbackManager$3 = createCallbackManager();
+
+var resizeListener = function resizeListener() {
+  callbackManager$3.trigger({
+    windowWidth: window.screen.width,
+    windowHeight: window.screen.height
+  });
+};
+/**
+ * @typedef {Object} WindowResizeParam
+ * @property {number} windowWidth 变化后的窗口宽度，单位 px
+ * @property {number} windowHeight 变化后的窗口高度，单位 px
+ */
+
+/**
+ * 监听窗口尺寸变化事件
+ * @param {(size: WindowResizeParam) => void} callback 窗口尺寸变化事件的回调函数
+ */
+
+
+var onWindowResize = function onWindowResize(callback) {
+  callbackManager$3.add(callback);
+
+  if (callbackManager$3.count() === 1) {
+    window.addEventListener('resize', resizeListener);
+  }
+};
+/**
+ * 取消监听窗口尺寸变化事件
+ * @param {(size: WindowResizeParam) => void} callback 窗口尺寸变化事件的回调函数
+ */
+
+var offWindowResize = function offWindowResize(callback) {
+  callbackManager$3.remove(callback);
+
+  if (callbackManager$3.count() === 0) {
+    window.removeEventListener('resize', resizeListener);
+  }
+};
+
 var onPageScroll = function onPageScroll(opt) {
   var callbackManager = createCallbackManager();
   var scroller = createScroller(opt.ctx);
+  var lastPos = 0;
 
   var onScroll = function onScroll() {
+    var newPos = scroller.getPos();
+    if (newPos === lastPos) return;
+    lastPos = newPos;
     callbackManager.trigger({
-      scrollTop: scroller.getPos()
+      scrollTop: newPos
     });
   };
 
@@ -9034,16 +10914,12 @@ var onReachBottom = function onReachBottom(opt) {
   };
 };
 
-var requestPayment = processOpenapi('chooseWXPay', undefined, undefined, function (options) {
-  return Object.assign(options, {
-    timestamp: Number.parseInt(options.timeStamp, 10)
-  });
+Object.defineProperty(exports, 'nextTick', {
+  enumerable: true,
+  get: function () {
+    return Nerv.nextTick;
+  }
 });
-
-exports.Component = Component;
-exports.ENV_TYPE = ENV_TYPE;
-exports.Events = Events;
-exports.PureComponent = PureComponent;
 exports.addCard = addCard;
 exports.addInterceptor = addInterceptor;
 exports.addPhoneContact = addPhoneContact;
@@ -9053,7 +10929,6 @@ exports.arrayBufferToBase64 = arrayBufferToBase64;
 exports.authorize = authorize;
 exports.base64ToArrayBuffer = base64ToArrayBuffer;
 exports.canIUse = canIUse;
-exports.canIUseWebp = canIUseWebp;
 exports.canvasGetImageData = canvasGetImageData;
 exports.canvasPutImageData = canvasPutImageData;
 exports.canvasToTempFilePath = canvasToTempFilePath;
@@ -9080,7 +10955,6 @@ exports.createAudioContext = createAudioContext;
 exports.createBLEConnection = createBLEConnection;
 exports.createCameraContext = createCameraContext;
 exports.createCanvasContext = createCanvasContext;
-exports.createContext = createContext;
 exports.createInnerAudioContext = createInnerAudioContext;
 exports.createIntersectionObserver = createIntersectionObserver;
 exports.createLivePlayerContext = createLivePlayerContext;
@@ -9093,10 +10967,8 @@ exports.default = taro;
 exports.dishClassify = dishClassify;
 exports.downloadFile = downloadFile;
 exports.drawCanvas = drawCanvas;
-exports.eventCenter = eventCenter;
 exports.faceVerifyForPay = faceVerifyForPay;
 exports.getAccountInfoSync = getAccountInfoSync;
-exports.getApp = getApp;
 exports.getAvailableAudioSources = getAvailableAudioSources;
 exports.getBLEDeviceCharacteristics = getBLEDeviceCharacteristics;
 exports.getBLEDeviceServices = getBLEDeviceServices;
@@ -9105,10 +10977,9 @@ exports.getBackgroundAudioPlayerState = getBackgroundAudioPlayerState;
 exports.getBeacons = getBeacons;
 exports.getBluetoothAdapterState = getBluetoothAdapterState;
 exports.getBluetoothDevices = getBluetoothDevices;
-exports.getClipBoardData = getClipBoardData;
+exports.getClipboardData = getClipboardData;
 exports.getConnectedBluetoothDevices = getConnectedBluetoothDevices;
 exports.getConnectedWifi = getConnectedWifi;
-exports.getEnv = getEnv;
 exports.getExtConfig = getExtConfig;
 exports.getExtConfigSync = getExtConfigSync;
 exports.getFileInfo = getFileInfo;
@@ -9117,6 +10988,7 @@ exports.getHCEState = getHCEState;
 exports.getImageInfo = getImageInfo;
 exports.getLocation = getLocation;
 exports.getLogManager = getLogManager;
+exports.getMenuButtonBoundingClientRect = getMenuButtonBoundingClientRect;
 exports.getNetworkType = getNetworkType;
 exports.getRecorderManager = getRecorderManager;
 exports.getSavedFileInfo = getSavedFileInfo;
@@ -9143,11 +11015,7 @@ exports.hideTabBar = hideTabBar;
 exports.hideTabBarRedDot = hideTabBarRedDot;
 exports.hideToast = hideToast;
 exports.imageAudit = imageAudit;
-exports.initPxTransform = initPxTransform$1;
 exports.initTabBarApis = initTabBarApis;
-exports.interceptors = interceptors;
-exports.internal_safe_get = get;
-exports.internal_safe_set = set;
 exports.loadFontFace = loadFontFace;
 exports.login = login;
 exports.logoClassify = logoClassify;
@@ -9175,6 +11043,7 @@ exports.onBeaconUpdate = onBeaconUpdate;
 exports.onBluetoothAdapterStateChange = onBluetoothAdapterStateChange;
 exports.onBluetoothDeviceFound = onBluetoothDeviceFound;
 exports.onCompassChange = onCompassChange;
+exports.onDeviceMotionChange = onDeviceMotionChange;
 exports.onGetWifiList = onGetWifiList;
 exports.onHCEMessage = onHCEMessage;
 exports.onMemoryWarning = onMemoryWarning;
@@ -9201,18 +11070,15 @@ exports.playBackgroundAudio = playBackgroundAudio;
 exports.playVoice = playVoice;
 exports.preloadSubPackage = preloadSubPackage;
 exports.previewImage = previewImage;
-exports.pxTransform = pxTransform;
 exports.readBLECharacteristicValue = readBLECharacteristicValue;
 exports.removeSavedFile = removeSavedFile;
 exports.removeStorage = removeStorage;
 exports.removeStorageSync = removeStorageSync;
 exports.removeTabBarBadge = removeTabBarBadge;
-exports.render = render;
 exports.reportAnalytics = reportAnalytics;
 exports.request = request;
 exports.requestPayment = requestPayment;
 exports.requestPolymerPayment = requestPolymerPayment;
-exports.requirePlugin = requirePlugin;
 exports.saveFile = saveFile;
 exports.saveImageToPhotosAlbum = saveImageToPhotosAlbum;
 exports.saveVideoToPhotosAlbum = saveVideoToPhotosAlbum;
@@ -9222,7 +11088,7 @@ exports.sendHCEMessage = sendHCEMessage;
 exports.sendSocketMessage = sendSocketMessage;
 exports.setBackgroundColor = setBackgroundColor;
 exports.setBackgroundTextStyle = setBackgroundTextStyle;
-exports.setClipBoardData = setClipBoardData;
+exports.setClipboardData = setClipboardData;
 exports.setEnableDebug = setEnableDebug;
 exports.setInnerAudioOption = setInnerAudioOption;
 exports.setKeepScreenOn = setKeepScreenOn;
@@ -9248,6 +11114,7 @@ exports.startAccelerometer = startAccelerometer;
 exports.startBeaconDiscovery = startBeaconDiscovery;
 exports.startBluetoothDevicesDiscovery = startBluetoothDevicesDiscovery;
 exports.startCompass = startCompass;
+exports.startDeviceMotionListening = startDeviceMotionListening;
 exports.startFacialRecognitionVerify = startFacialRecognitionVerify;
 exports.startFacialRecognitionVerifyAndUploadVideo = startFacialRecognitionVerifyAndUploadVideo;
 exports.startHCE = startHCE;
@@ -9260,6 +11127,7 @@ exports.stopBackgroundAudio = stopBackgroundAudio;
 exports.stopBeaconDiscovery = stopBeaconDiscovery;
 exports.stopBluetoothDevicesDiscovery = stopBluetoothDevicesDiscovery;
 exports.stopCompass = stopCompass;
+exports.stopDeviceMotionListening = stopDeviceMotionListening;
 exports.stopHCE = stopHCE;
 exports.stopPullDownRefresh = stopPullDownRefresh;
 exports.stopRecord = stopRecord;
