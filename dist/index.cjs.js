@@ -4,6 +4,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
 
+require('@tarojs/utils/src/shallow-equal');
 var Nerv = require('nervjs');
 var Nerv__default = _interopDefault(Nerv);
 
@@ -151,6 +152,44 @@ function _construct(Parent, args, Class) {
   }
 
   return _construct.apply(null, arguments);
+}
+
+function _isNativeFunction(fn) {
+  return Function.toString.call(fn).indexOf("[native code]") !== -1;
+}
+
+function _wrapNativeSuper(Class) {
+  var _cache = typeof Map === "function" ? new Map() : undefined;
+
+  _wrapNativeSuper = function _wrapNativeSuper(Class) {
+    if (Class === null || !_isNativeFunction(Class)) return Class;
+
+    if (typeof Class !== "function") {
+      throw new TypeError("Super expression must either be null or a function");
+    }
+
+    if (typeof _cache !== "undefined") {
+      if (_cache.has(Class)) return _cache.get(Class);
+
+      _cache.set(Class, Wrapper);
+    }
+
+    function Wrapper() {
+      return _construct(Class, arguments, _getPrototypeOf(this).constructor);
+    }
+
+    Wrapper.prototype = Object.create(Class.prototype, {
+      constructor: {
+        value: Wrapper,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      }
+    });
+    return _setPrototypeOf(Wrapper, Class);
+  };
+
+  return _wrapNativeSuper(Class);
 }
 
 function _assertThisInitialized(self) {
@@ -458,7 +497,7 @@ var _Symbol = root.Symbol,
     splice = arrayProto.splice;
 /* Built-in method references that are verified to be native. */
 
-var Map = getNative(root, 'Map'),
+var Map$1 = getNative(root, 'Map'),
     nativeCreate = getNative(Object, 'create');
 /** Used to convert symbols to primitives and strings. */
 
@@ -719,7 +758,7 @@ function MapCache(entries) {
 function mapCacheClear() {
   this.__data__ = {
     hash: new Hash(),
-    map: new (Map || ListCache)(),
+    map: new (Map$1 || ListCache)(),
     string: new Hash()
   };
 }
@@ -1458,9 +1497,14 @@ var ENV_TYPE = {
   SWAN: 'SWAN',
   ALIPAY: 'ALIPAY',
   TT: 'TT',
-  QQ: 'QQ'
+  QQ: 'QQ',
+  JD: 'JD'
 };
 function getEnv() {
+  if (typeof jd !== 'undefined' && jd.getSystemInfo) {
+    return ENV_TYPE.JD;
+  }
+
   if (typeof qq !== 'undefined' && qq.getSystemInfo) {
     return ENV_TYPE.QQ;
   }
@@ -1620,6 +1664,37 @@ Events.eventSplitter = /\s+/;
 
 function render() {}
 
+var RefsArray =
+/*#__PURE__*/
+function (_Array) {
+  _inherits(RefsArray, _Array);
+
+  /**
+   * @param {Array} initList
+   */
+  function RefsArray() {
+    var _getPrototypeOf2;
+
+    var initList = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
+
+    _classCallCheck(this, RefsArray);
+
+    return _possibleConstructorReturn(this, (_getPrototypeOf2 = _getPrototypeOf(RefsArray)).call.apply(_getPrototypeOf2, [this].concat(_toConsumableArray(initList))));
+  }
+
+  _createClass(RefsArray, [{
+    key: "pushRef",
+    value: function pushRef($$ref) {
+      var isExist = this.find(function (item) {
+        return item.id === $$ref.id;
+      });
+      !isExist && this.push($$ref);
+    }
+  }]);
+
+  return RefsArray;
+}(_wrapNativeSuper(Array));
+
 var Chain =
 /*#__PURE__*/
 function () {
@@ -1682,6 +1757,11 @@ function () {
   _createClass(Link, [{
     key: "request",
     value: function request(requestParams) {
+      var _this = this;
+
+      this.chain.interceptors = this.chain.interceptors.filter(function (interceptor) {
+        return interceptor !== _this.taroInterceptor;
+      });
       this.chain.interceptors.push(this.taroInterceptor);
       return this.chain.proceed(_objectSpread2({}, requestParams));
     }
@@ -1702,12 +1782,14 @@ function () {
 
 function timeoutInterceptor(chain) {
   var requestParams = chain.requestParams;
-  return new Promise(function (resolve, reject) {
+  var p;
+  var res = new Promise(function (resolve, reject) {
     var timeout = setTimeout(function () {
       timeout = null;
       reject(new Error('网络链接超时,请稍后再试！'));
     }, requestParams && requestParams.timeout || 60000);
-    chain.proceed(requestParams).then(function (res) {
+    p = chain.proceed(requestParams);
+    p.then(function (res) {
       if (!timeout) return;
       clearTimeout(timeout);
       resolve(res);
@@ -1716,6 +1798,8 @@ function timeoutInterceptor(chain) {
       reject(err);
     });
   });
+  if (typeof p.abort === 'function') res.abort = p.abort;
+  return res;
 }
 function logInterceptor(chain) {
   var requestParams = chain.requestParams;
@@ -1723,10 +1807,13 @@ function logInterceptor(chain) {
       data = requestParams.data,
       url = requestParams.url;
   console.log("http ".concat(method || 'GET', " --> ").concat(url, " data: "), data);
-  return chain.proceed(requestParams).then(function (res) {
+  var p = chain.proceed(requestParams);
+  var res = p.then(function (res) {
     console.log("http <-- ".concat(url, " result:"), res);
     return res;
   });
+  if (typeof p.abort === 'function') res.abort = p.abort;
+  return res;
 }
 
 var interceptors = /*#__PURE__*/Object.freeze({
@@ -1752,7 +1839,17 @@ function initPxTransform(config) {
 var defer = typeof Promise === 'function' ? Promise.prototype.then.bind(Promise.resolve()) : setTimeout;
 
 /* eslint-disable camelcase */
-var eventCenter = new Events();
+
+
+if (process.env.TARO_ENV === 'alipay') {
+  if (!my.taroEventCenter) {
+    my.taroEventCenter = new Events();
+  }
+
+  exports.eventCenter = my.taroEventCenter;
+} else {
+  exports.eventCenter = new Events();
+}
 
 function shouleBeObject(target) {
   if (target && _typeof(target) === 'object') return {
@@ -1834,7 +1931,7 @@ function serializeParams(params) {
   }
 
   return Object.keys(params).map(function (key) {
-    return "".concat(encodeURIComponent(key), "=").concat(encodeURIComponent(params[key]));
+    return "".concat(encodeURIComponent(key), "=").concat(_typeof(params[key]) === "object" ? encodeURIComponent(JSON.stringify(params[key])) : encodeURIComponent(params[key]));
   }).join('&');
 }
 
@@ -2037,11 +2134,73 @@ var getTimingFunc = function getTimingFunc(easeFunc, frameCnt) {
   };
 };
 
+var onPageScroll = function onPageScroll(opt) {
+  var callbackManager = createCallbackManager();
+  var scroller = createScroller(opt.ctx);
+  var lastPos = 0;
+
+  var onScroll = function onScroll() {
+    var newPos = scroller.getPos();
+    if (newPos === lastPos) return;
+    lastPos = newPos;
+    callbackManager.trigger({
+      scrollTop: newPos
+    });
+  };
+
+  callbackManager.add(opt);
+  scroller.listen(onScroll);
+  return function () {
+    callbackManager.remove(opt);
+
+    if (callbackManager.count() === 0) {
+      scroller.unlisten(onScroll);
+    }
+  };
+};
+
+/**
+ * @typedef {Object} ReachBottomParam
+ * @property {Function} callback
+ * @property {*} ctx
+ * @property {Number|undefined} onReachBottomDistance
+ */
+
+/**
+ * @param {ReachBottomParam} opt 
+ */
+
+var onReachBottom = function onReachBottom(opt) {
+  var callbackManager = createCallbackManager();
+  var scroller = createScroller(opt.ctx);
+  var distance = typeof opt.onReachBottomDistance === 'number' ? opt.onReachBottomDistance : 50;
+  var canTrigger = true;
+
+  var onScroll = function onScroll() {
+    if (scroller.isReachBottom(distance)) {
+      canTrigger && callbackManager.trigger();
+      canTrigger = false;
+    } else {
+      canTrigger = true;
+    }
+  };
+
+  callbackManager.add(opt);
+  scroller.listen(onScroll);
+  return function () {
+    callbackManager.remove(opt);
+
+    if (callbackManager.count() === 0) {
+      scroller.unlisten(onScroll);
+    }
+  };
+};
+
 var taro = {
   getEnv: getEnv,
   ENV_TYPE: ENV_TYPE,
   Events: Events,
-  eventCenter: eventCenter,
+  eventCenter: exports.eventCenter,
   render: render,
   internal_safe_set: set,
   internal_safe_get: get,
@@ -2206,6 +2365,97 @@ var canIUseWebp = function canIUseWebp() {
   return canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
 };
 
+function usePageLifecycle(callback, lifecycle) {
+  var hook = Nerv.getHooks(Nerv.Current.index++);
+  var originalLifecycle;
+  hook.component = Nerv.Current.current;
+
+  if (!hook.marked) {
+    hook.marked = true;
+    originalLifecycle = hook.component[lifecycle];
+  }
+
+  hook.component[lifecycle] = function () {
+    var _originalLifecycle;
+
+    originalLifecycle && (_originalLifecycle = originalLifecycle).call.apply(_originalLifecycle, [hook.component].concat(Array.prototype.slice.call(arguments)));
+    callback && callback.call.apply(callback, [hook.component].concat(Array.prototype.slice.call(arguments)));
+  };
+}
+
+function useSpecialPageLifecycle(_callback, lifecycle, lifeFn) {
+  var hook = Nerv.getHooks(Nerv.Current.index++);
+  var originalLifecycle;
+  hook.component = Nerv.Current.current;
+
+  if (!hook.marked) {
+    hook.marked = true;
+    originalLifecycle = hook.component[lifecycle];
+    var originalDidShow = hook.component['componentDidShow'];
+    var originalDidHide = hook.component['componentDidHide'];
+
+    hook.component['componentDidShow'] = function () {
+      originalDidShow && originalDidShow.call.apply(originalDidShow, [hook.component].concat(Array.prototype.slice.call(arguments)));
+      hook.component._offFn = lifeFn({
+        callback: function callback() {
+          var _originalLifecycle2;
+
+          originalLifecycle && (_originalLifecycle2 = originalLifecycle).call.apply(_originalLifecycle2, [hook.component].concat(Array.prototype.slice.call(arguments)));
+          _callback && _callback.call.apply(_callback, [hook.component].concat(Array.prototype.slice.call(arguments)));
+        },
+        ctx: hook.component
+      });
+    };
+
+    hook.component['componentDidHide'] = function () {
+      originalDidHide && originalDidHide.call.apply(originalDidHide, [hook.component].concat(Array.prototype.slice.call(arguments)));
+      hook.component._offFn && hook.component._offFn();
+    };
+  } else {
+    hook.component._offFn && hook.component._offFn();
+    hook.component._offFn = lifeFn({
+      callback: function callback() {
+        var _originalLifecycle3;
+
+        originalLifecycle && (_originalLifecycle3 = originalLifecycle).call.apply(_originalLifecycle3, [hook.component].concat(Array.prototype.slice.call(arguments)));
+        _callback && _callback.call.apply(_callback, [hook.component].concat(Array.prototype.slice.call(arguments)));
+      },
+      ctx: hook.component
+    });
+  }
+}
+
+function useDidShow(callback) {
+  usePageLifecycle(callback, 'componentDidShow');
+}
+
+function useDidHide(callback) {
+  usePageLifecycle(callback, 'componentDidHide');
+}
+
+function usePullDownRefresh(callback) {
+  usePageLifecycle(callback, 'onPullDownRefresh');
+}
+
+function useReachBottom(callback) {
+  useSpecialPageLifecycle(callback, 'onReachBottom', onReachBottom);
+}
+
+function usePageScroll(callback) {
+  useSpecialPageLifecycle(callback, 'onPageScroll', onPageScroll);
+}
+
+function useRouter() {
+  var hook = Nerv.getHooks(Nerv.Current.index++);
+
+  if (!hook.router) {
+    hook.component = Nerv.Current.current;
+    hook.router = hook.component.$router;
+  }
+
+  return hook.router;
+}
+
 taro.Component = Component;
 taro.PureComponent = PureComponent;
 taro.initPxTransform = initPxTransform$1;
@@ -2214,6 +2464,12 @@ taro.getApp = getApp;
 taro.pxTransform = pxTransform;
 taro.canIUseWebp = canIUseWebp;
 taro.interceptors = interceptors;
+taro.useDidShow = useDidShow;
+taro.useDidHide = useDidHide;
+taro.usePullDownRefresh = usePullDownRefresh;
+taro.useReachBottom = useReachBottom;
+taro.usePageScroll = usePageScroll;
+taro.useRouter = useRouter;
 
 // export const onSocketOpen = temporarilyNotSupport('onSocketOpen')
 // export const onSocketError = temporarilyNotSupport('onSocketError')
@@ -3083,7 +3339,7 @@ var createCanvasContext = function createCanvasContext(canvasId, componentInstan
   ['setTextBaseline', function (textBaseline) {
     ctx.textBaseline = textBaseline;
   }]];
-  var functionProperties = ['arc', 'arcTo', 'beginPath', 'bezierCurveTo', 'clearRect', 'clip', 'closePath', 'createCircularGradient', 'createLinearGradient', 'createPattern', 'drawImage', 'fill', 'fillRect', 'fillText', 'lineTo', 'measureText', 'moveTo', 'quadraticCurveTo', 'rect', 'restore', 'rotate', 'save', 'scale', 'setTransform', 'stroke', 'strokeRect', 'strokeText', 'transform', 'translate'];
+  var functionProperties = [['arc'], ['arcTo'], ['beginPath'], ['bezierCurveTo'], ['clearRect'], ['clip'], ['closePath'], ['createCircularGradient'], ['createLinearGradient'], ['createPattern'], ['drawImage'], ['fill'], ['fillRect'], ['fillText'], ['lineTo'], ['measureText', true], ['moveTo'], ['quadraticCurveTo'], ['rect'], ['restore'], ['rotate'], ['save'], ['scale'], ['setTransform'], ['stroke'], ['strokeRect'], ['strokeText'], ['transform'], ['translate']];
   var valueProperties = ['fillStyle', 'font', 'globalAlpha', 'lineCap', 'lineDashOffset', 'lineJoin', 'lineWidth', 'miterLimit', 'shadowOffsetX', 'shadowOffsetY', 'shadowColor', 'shadowBlur', 'strokeStyle', 'textAlign', 'textBaseline', 'direction', 'globalCompositeOperation', 'imageSmoothingEnabled ', 'imageSmoothingQuality', 'filter'];
   var CanvasContext = {};
   customProperties.forEach(function (_ref2) {
@@ -3098,9 +3354,15 @@ var createCanvasContext = function createCanvasContext(canvasId, componentInstan
       enumerable: true
     });
   });
-  functionProperties.forEach(function (funcName) {
+  functionProperties.forEach(function (_ref4) {
+    var _ref5 = _slicedToArray(_ref4, 2),
+        funcName = _ref5[0],
+        isSync = _ref5[1];
+
     Object.defineProperty(CanvasContext, funcName, {
-      get: function get() {
+      get: isSync ? function () {
+        return ctx[funcName].bind(ctx);
+      } : function () {
         return enqueueActions(ctx[funcName]);
       },
       enumerable: true
@@ -4925,7 +5187,9 @@ var chooseImage = function chooseImage(options) {
     var arr = _toConsumableArray(e.target.files);
 
     arr && arr.forEach(function (item) {
-      var blob = new Blob([item]);
+      var blob = new Blob([item], {
+        type: item.type
+      });
       var url = URL.createObjectURL(blob);
       res.tempFilePaths.push(url);
       res.tempFiles.push({
@@ -4937,6 +5201,7 @@ var chooseImage = function chooseImage(options) {
     typeof success === 'function' && success(res);
     typeof complete === 'function' && complete(res);
     taroChooseImageCallback(res);
+    e.target.value = '';
   };
 
   return taroChooseImagePromise;
@@ -7240,10 +7505,16 @@ function (_Taro$Component) {
     });
 
     locationChooser = _assertThisInitialized(_this);
+    window.addEventListener('popstate', _this.onBack);
     return _this;
   }
 
   _createClass(LocationChooser, [{
+    key: "componentWillUnmount",
+    value: function componentWillUnmount() {
+      window.removeEventListener('popstate', this.onBack);
+    }
+  }, {
     key: "render",
     value: function render() {
       return Nerv__default.createPortal(Nerv__default.createElement("div", {
@@ -10445,7 +10716,13 @@ function setTabBarItem() {
   return successHandler(success, complete)(res);
 }
 
-var vibrator = window.navigator.vibrate;
+var vibrator = function vibrator(mm) {
+  try {
+    return window.navigator.vibrate(mm);
+  } catch (e) {
+    console.log('当前浏览器不支持vibrate');
+  }
+};
 /**
  * 使手机发生较短时间的振动（15 ms）。仅在 iPhone 7 / 7 Plus 以上及 Android 机型生效
  * @param {Object} object 参数
@@ -10453,6 +10730,7 @@ var vibrator = window.navigator.vibrate;
  * @param {function} [object.fail] 接口调用失败的回调函数
  * @param {function} [object.complete] 接口调用结束的回调函数（调用成功、失败都会执行）
  */
+
 
 var vibrateShort = function vibrateShort() {
   var _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
@@ -10852,74 +11130,408 @@ var offWindowResize = function offWindowResize(callback) {
   }
 };
 
-var onPageScroll = function onPageScroll(opt) {
-  var callbackManager = createCallbackManager();
-  var scroller = createScroller(opt.ctx);
-  var lastPos = 0;
+/* 未支持的api */
 
-  var onScroll = function onScroll() {
-    var newPos = scroller.getPos();
-    if (newPos === lastPos) return;
-    lastPos = newPos;
-    callbackManager.trigger({
-      scrollTop: newPos
-    });
-  };
+var TaroApis = /*#__PURE__*/Object.freeze({
+  __proto__: null,
+  setNavigationBarTitle: setNavigationBarTitle,
+  setNavigationBarColor: setNavigationBarColor,
+  onBackgroundAudioPlay: onBackgroundAudioPlay,
+  onBackgroundAudioPause: onBackgroundAudioPause,
+  onBackgroundAudioStop: onBackgroundAudioStop,
+  onBluetoothAdapterStateChange: onBluetoothAdapterStateChange,
+  onBluetoothDeviceFound: onBluetoothDeviceFound,
+  onBLEConnectionStateChange: onBLEConnectionStateChange,
+  onBLECharacteristicValueChange: onBLECharacteristicValueChange,
+  onBeaconUpdate: onBeaconUpdate,
+  onBeaconServiceChange: onBeaconServiceChange,
+  onUserCaptureScreen: onUserCaptureScreen,
+  onHCEMessage: onHCEMessage,
+  onGetWifiList: onGetWifiList,
+  onWifiConnected: onWifiConnected,
+  getExtConfigSync: getExtConfigSync,
+  getLogManager: getLogManager,
+  onMemoryWarning: onMemoryWarning,
+  reportAnalytics: reportAnalytics,
+  navigateToSmartGameProgram: navigateToSmartGameProgram,
+  getFileSystemManager: getFileSystemManager,
+  stopRecord: stopRecord,
+  getRecorderManager: getRecorderManager,
+  pauseVoice: pauseVoice,
+  stopVoice: stopVoice,
+  pauseBackgroundAudio: pauseBackgroundAudio,
+  stopBackgroundAudio: stopBackgroundAudio,
+  getBackgroundAudioManager: getBackgroundAudioManager,
+  createAudioContext: createAudioContext,
+  createCameraContext: createCameraContext,
+  createLivePlayerContext: createLivePlayerContext,
+  createLivePusherContext: createLivePusherContext,
+  createMapContext: createMapContext,
+  canIUse: canIUse,
+  showNavigationBarLoading: showNavigationBarLoading,
+  hideNavigationBarLoading: hideNavigationBarLoading,
+  drawCanvas: drawCanvas,
+  hideKeyboard: hideKeyboard,
+  createIntersectionObserver: createIntersectionObserver,
+  getMenuButtonBoundingClientRect: getMenuButtonBoundingClientRect,
+  getAccountInfoSync: getAccountInfoSync,
+  getUpdateManager: getUpdateManager,
+  createWorker: createWorker,
+  saveImageToPhotosAlbum: saveImageToPhotosAlbum,
+  startRecord: startRecord,
+  playVoice: playVoice,
+  setInnerAudioOption: setInnerAudioOption,
+  getAvailableAudioSources: getAvailableAudioSources,
+  getBackgroundAudioPlayerState: getBackgroundAudioPlayerState,
+  playBackgroundAudio: playBackgroundAudio,
+  seekBackgroundAudio: seekBackgroundAudio,
+  saveVideoToPhotosAlbum: saveVideoToPhotosAlbum,
+  loadFontFace: loadFontFace,
+  saveFile: saveFile,
+  getFileInfo: getFileInfo,
+  getSavedFileList: getSavedFileList,
+  getSavedFileInfo: getSavedFileInfo,
+  removeSavedFile: removeSavedFile,
+  openDocument: openDocument,
+  openBluetoothAdapter: openBluetoothAdapter,
+  closeBluetoothAdapter: closeBluetoothAdapter,
+  getBluetoothAdapterState: getBluetoothAdapterState,
+  startBluetoothDevicesDiscovery: startBluetoothDevicesDiscovery,
+  stopBluetoothDevicesDiscovery: stopBluetoothDevicesDiscovery,
+  getBluetoothDevices: getBluetoothDevices,
+  getConnectedBluetoothDevices: getConnectedBluetoothDevices,
+  createBLEConnection: createBLEConnection,
+  closeBLEConnection: closeBLEConnection,
+  getBLEDeviceServices: getBLEDeviceServices,
+  getBLEDeviceCharacteristics: getBLEDeviceCharacteristics,
+  readBLECharacteristicValue: readBLECharacteristicValue,
+  writeBLECharacteristicValue: writeBLECharacteristicValue,
+  notifyBLECharacteristicValueChange: notifyBLECharacteristicValueChange,
+  startBeaconDiscovery: startBeaconDiscovery,
+  stopBeaconDiscovery: stopBeaconDiscovery,
+  getBeacons: getBeacons,
+  setScreenBrightness: setScreenBrightness,
+  getScreenBrightness: getScreenBrightness,
+  setKeepScreenOn: setKeepScreenOn,
+  addPhoneContact: addPhoneContact,
+  getHCEState: getHCEState,
+  startHCE: startHCE,
+  stopHCE: stopHCE,
+  sendHCEMessage: sendHCEMessage,
+  startWifi: startWifi,
+  stopWifi: stopWifi,
+  connectWifi: connectWifi,
+  getWifiList: getWifiList,
+  setWifiList: setWifiList,
+  getConnectedWifi: getConnectedWifi,
+  setTopBarText: setTopBarText,
+  setBackgroundColor: setBackgroundColor,
+  setBackgroundTextStyle: setBackgroundTextStyle,
+  getExtConfig: getExtConfig,
+  login: login,
+  checkSession: checkSession,
+  authorize: authorize,
+  getUserInfo: getUserInfo,
+  checkIsSupportFacialRecognition: checkIsSupportFacialRecognition,
+  startFacialRecognitionVerify: startFacialRecognitionVerify,
+  startFacialRecognitionVerifyAndUploadVideo: startFacialRecognitionVerifyAndUploadVideo,
+  faceVerifyForPay: faceVerifyForPay,
+  showShareMenu: showShareMenu,
+  hideShareMenu: hideShareMenu,
+  updateShareMenu: updateShareMenu,
+  getShareInfo: getShareInfo,
+  chooseAddress: chooseAddress,
+  addCard: addCard,
+  openCard: openCard,
+  openSetting: openSetting,
+  getSetting: getSetting,
+  getWeRunData: getWeRunData,
+  navigateToMiniProgram: navigateToMiniProgram,
+  navigateBackMiniProgram: navigateBackMiniProgram,
+  chooseInvoice: chooseInvoice,
+  chooseInvoiceTitle: chooseInvoiceTitle,
+  checkIsSupportSoterAuthentication: checkIsSupportSoterAuthentication,
+  startSoterAuthentication: startSoterAuthentication,
+  checkIsSoterEnrolledInDevice: checkIsSoterEnrolledInDevice,
+  setEnableDebug: setEnableDebug,
+  ocrIdCard: ocrIdCard,
+  ocrBankCard: ocrBankCard,
+  ocrDrivingLicense: ocrDrivingLicense,
+  ocrVehicleLicense: ocrVehicleLicense,
+  textReview: textReview,
+  textToAudio: textToAudio,
+  imageAudit: imageAudit,
+  advancedGeneralIdentify: advancedGeneralIdentify,
+  objectDetectIdentify: objectDetectIdentify,
+  carClassify: carClassify,
+  dishClassify: dishClassify,
+  logoClassify: logoClassify,
+  animalClassify: animalClassify,
+  plantClassify: plantClassify,
+  getSwanId: getSwanId,
+  requestPolymerPayment: requestPolymerPayment,
+  navigateToSmartProgram: navigateToSmartProgram,
+  navigateBackSmartProgram: navigateBackSmartProgram,
+  preloadSubPackage: preloadSubPackage,
+  createInnerAudioContext: createInnerAudioContext,
+  canvasGetImageData: canvasGetImageData,
+  canvasPutImageData: canvasPutImageData,
+  canvasToTempFilePath: canvasToTempFilePath,
+  createCanvasContext: createCanvasContext,
+  setClipboardData: setClipboardData,
+  getClipboardData: getClipboardData,
+  stopCompass: stopCompass,
+  startCompass: startCompass,
+  onCompassChange: onCompassChange,
+  createAnimation: createAnimation,
+  createSelectorQuery: createSelectorQuery,
+  nextTick: Nerv.nextTick,
+  stopDeviceMotionListening: stopDeviceMotionListening,
+  startDeviceMotionListening: startDeviceMotionListening,
+  onDeviceMotionChange: onDeviceMotionChange,
+  downloadFile: downloadFile,
+  uploadFile: uploadFile,
+  chooseImage: chooseImage,
+  getImageInfo: getImageInfo,
+  previewImage: previewImage,
+  showToast: showToast,
+  hideToast: hideToast,
+  showLoading: showLoading,
+  hideLoading: hideLoading,
+  showModal: showModal,
+  showActionSheet: showActionSheet,
+  getLocation: getLocation,
+  openLocation: openLocation,
+  chooseLocation: chooseLocation,
+  stopAccelerometer: stopAccelerometer,
+  startAccelerometer: startAccelerometer,
+  onAccelerometerChange: onAccelerometerChange,
+  requestPayment: requestPayment,
+  arrayBufferToBase64: arrayBufferToBase64,
+  base64ToArrayBuffer: base64ToArrayBuffer,
+  makePhoneCall: makePhoneCall,
+  startPullDownRefresh: startPullDownRefresh,
+  stopPullDownRefresh: stopPullDownRefresh,
+  request: request,
+  addInterceptor: addInterceptor,
+  pageScrollTo: pageScrollTo,
+  setStorage: setStorage,
+  setStorageSync: setStorageSync,
+  getStorage: getStorage,
+  getStorageSync: getStorageSync,
+  getStorageInfo: getStorageInfo,
+  getStorageInfoSync: getStorageInfoSync,
+  removeStorage: removeStorage,
+  removeStorageSync: removeStorageSync,
+  clearStorage: clearStorage,
+  clearStorageSync: clearStorage,
+  scanCode: scanCode,
+  getSystemInfo: getSystemInfo,
+  getSystemInfoSync: getSystemInfoSync,
+  getNetworkType: getNetworkType,
+  onNetworkStatusChange: onNetworkStatusChange,
+  initTabBarApis: initTabBarApis,
+  switchTab: switchTab,
+  setTabBarBadge: setTabBarBadge,
+  removeTabBarBadge: removeTabBarBadge,
+  showTabBarRedDot: showTabBarRedDot,
+  hideTabBarRedDot: hideTabBarRedDot,
+  showTabBar: showTabBar,
+  hideTabBar: hideTabBar,
+  setTabBarStyle: setTabBarStyle,
+  setTabBarItem: setTabBarItem,
+  vibrateShort: vibrateShort,
+  vibrateLong: vibrateLong,
+  chooseVideo: chooseVideo,
+  createVideoContext: createVideoContext,
+  connectSocket: connectSocket,
+  onSocketOpen: onSocketOpen,
+  onSocketError: onSocketError,
+  sendSocketMessage: sendSocketMessage,
+  onSocketMessage: onSocketMessage,
+  closeSocket: closeSocket,
+  onSocketClose: onSocketClose,
+  onWindowResize: onWindowResize,
+  offWindowResize: offWindowResize,
+  onPageScroll: onPageScroll,
+  onReachBottom: onReachBottom
+});
 
-  callbackManager.add(opt);
-  scroller.listen(onScroll);
-  return function () {
-    callbackManager.remove(opt);
+/* 这个入口提供给使用require的用户 */
+Object.assign(taro, TaroApis);
 
-    if (callbackManager.count() === 0) {
-      scroller.unlisten(onScroll);
-    }
-  };
-};
-
-/**
- * @typedef {Object} ReachBottomParam
- * @property {Function} callback
- * @property {*} ctx
- * @property {Number|undefined} onReachBottomDistance
- */
-
-/**
- * @param {ReachBottomParam} opt 
- */
-
-var onReachBottom = function onReachBottom(opt) {
-  var callbackManager = createCallbackManager();
-  var scroller = createScroller(opt.ctx);
-  var distance = typeof opt.onReachBottomDistance === 'number' ? opt.onReachBottomDistance : 50;
-  var canTrigger = true;
-
-  var onScroll = function onScroll() {
-    if (scroller.isReachBottom(distance)) {
-      canTrigger && callbackManager.trigger();
-      canTrigger = false;
-    } else {
-      canTrigger = true;
-    }
-  };
-
-  callbackManager.add(opt);
-  scroller.listen(onScroll);
-  return function () {
-    callbackManager.remove(opt);
-
-    if (callbackManager.count() === 0) {
-      scroller.unlisten(onScroll);
-    }
-  };
-};
-
+Object.defineProperty(exports, 'Children', {
+  enumerable: true,
+  get: function () {
+    return Nerv.Children;
+  }
+});
+Object.defineProperty(exports, 'PropTypes', {
+  enumerable: true,
+  get: function () {
+    return Nerv.PropTypes;
+  }
+});
+Object.defineProperty(exports, 'cloneElement', {
+  enumerable: true,
+  get: function () {
+    return Nerv.cloneElement;
+  }
+});
+Object.defineProperty(exports, 'createContext', {
+  enumerable: true,
+  get: function () {
+    return Nerv.createContext;
+  }
+});
+Object.defineProperty(exports, 'createElement', {
+  enumerable: true,
+  get: function () {
+    return Nerv.createElement;
+  }
+});
+Object.defineProperty(exports, 'createFactory', {
+  enumerable: true,
+  get: function () {
+    return Nerv.createFactory;
+  }
+});
+Object.defineProperty(exports, 'createPortal', {
+  enumerable: true,
+  get: function () {
+    return Nerv.createPortal;
+  }
+});
+Object.defineProperty(exports, 'createRef', {
+  enumerable: true,
+  get: function () {
+    return Nerv.createRef;
+  }
+});
+Object.defineProperty(exports, 'findDOMNode', {
+  enumerable: true,
+  get: function () {
+    return Nerv.findDOMNode;
+  }
+});
+Object.defineProperty(exports, 'forwardRef', {
+  enumerable: true,
+  get: function () {
+    return Nerv.forwardRef;
+  }
+});
+Object.defineProperty(exports, 'hydrate', {
+  enumerable: true,
+  get: function () {
+    return Nerv.hydrate;
+  }
+});
+Object.defineProperty(exports, 'isValidElement', {
+  enumerable: true,
+  get: function () {
+    return Nerv.isValidElement;
+  }
+});
+Object.defineProperty(exports, 'memo', {
+  enumerable: true,
+  get: function () {
+    return Nerv.memo;
+  }
+});
 Object.defineProperty(exports, 'nextTick', {
   enumerable: true,
   get: function () {
     return Nerv.nextTick;
   }
 });
+Object.defineProperty(exports, 'options', {
+  enumerable: true,
+  get: function () {
+    return Nerv.options;
+  }
+});
+Object.defineProperty(exports, 'unmountComponentAtNode', {
+  enumerable: true,
+  get: function () {
+    return Nerv.unmountComponentAtNode;
+  }
+});
+Object.defineProperty(exports, 'unstable_batchedUpdates', {
+  enumerable: true,
+  get: function () {
+    return Nerv.unstable_batchedUpdates;
+  }
+});
+Object.defineProperty(exports, 'unstable_renderSubtreeIntoContainer', {
+  enumerable: true,
+  get: function () {
+    return Nerv.unstable_renderSubtreeIntoContainer;
+  }
+});
+Object.defineProperty(exports, 'useCallback', {
+  enumerable: true,
+  get: function () {
+    return Nerv.useCallback;
+  }
+});
+Object.defineProperty(exports, 'useContext', {
+  enumerable: true,
+  get: function () {
+    return Nerv.useContext;
+  }
+});
+Object.defineProperty(exports, 'useEffect', {
+  enumerable: true,
+  get: function () {
+    return Nerv.useEffect;
+  }
+});
+Object.defineProperty(exports, 'useImperativeHandle', {
+  enumerable: true,
+  get: function () {
+    return Nerv.useImperativeHandle;
+  }
+});
+Object.defineProperty(exports, 'useLayoutEffect', {
+  enumerable: true,
+  get: function () {
+    return Nerv.useLayoutEffect;
+  }
+});
+Object.defineProperty(exports, 'useMemo', {
+  enumerable: true,
+  get: function () {
+    return Nerv.useMemo;
+  }
+});
+Object.defineProperty(exports, 'useReducer', {
+  enumerable: true,
+  get: function () {
+    return Nerv.useReducer;
+  }
+});
+Object.defineProperty(exports, 'useRef', {
+  enumerable: true,
+  get: function () {
+    return Nerv.useRef;
+  }
+});
+Object.defineProperty(exports, 'useState', {
+  enumerable: true,
+  get: function () {
+    return Nerv.useState;
+  }
+});
+Object.defineProperty(exports, 'version', {
+  enumerable: true,
+  get: function () {
+    return Nerv.version;
+  }
+});
+exports.Component = Component;
+exports.ENV_TYPE = ENV_TYPE;
+exports.Events = Events;
+exports.PureComponent = PureComponent;
 exports.addCard = addCard;
 exports.addInterceptor = addInterceptor;
 exports.addPhoneContact = addPhoneContact;
@@ -10929,6 +11541,7 @@ exports.arrayBufferToBase64 = arrayBufferToBase64;
 exports.authorize = authorize;
 exports.base64ToArrayBuffer = base64ToArrayBuffer;
 exports.canIUse = canIUse;
+exports.canIUseWebp = canIUseWebp;
 exports.canvasGetImageData = canvasGetImageData;
 exports.canvasPutImageData = canvasPutImageData;
 exports.canvasToTempFilePath = canvasToTempFilePath;
@@ -10969,6 +11582,7 @@ exports.downloadFile = downloadFile;
 exports.drawCanvas = drawCanvas;
 exports.faceVerifyForPay = faceVerifyForPay;
 exports.getAccountInfoSync = getAccountInfoSync;
+exports.getApp = getApp;
 exports.getAvailableAudioSources = getAvailableAudioSources;
 exports.getBLEDeviceCharacteristics = getBLEDeviceCharacteristics;
 exports.getBLEDeviceServices = getBLEDeviceServices;
@@ -10980,6 +11594,7 @@ exports.getBluetoothDevices = getBluetoothDevices;
 exports.getClipboardData = getClipboardData;
 exports.getConnectedBluetoothDevices = getConnectedBluetoothDevices;
 exports.getConnectedWifi = getConnectedWifi;
+exports.getEnv = getEnv;
 exports.getExtConfig = getExtConfig;
 exports.getExtConfigSync = getExtConfigSync;
 exports.getFileInfo = getFileInfo;
@@ -11015,7 +11630,11 @@ exports.hideTabBar = hideTabBar;
 exports.hideTabBarRedDot = hideTabBarRedDot;
 exports.hideToast = hideToast;
 exports.imageAudit = imageAudit;
+exports.initPxTransform = initPxTransform$1;
 exports.initTabBarApis = initTabBarApis;
+exports.interceptors = interceptors;
+exports.internal_safe_get = get;
+exports.internal_safe_set = set;
 exports.loadFontFace = loadFontFace;
 exports.login = login;
 exports.logoClassify = logoClassify;
@@ -11070,15 +11689,18 @@ exports.playBackgroundAudio = playBackgroundAudio;
 exports.playVoice = playVoice;
 exports.preloadSubPackage = preloadSubPackage;
 exports.previewImage = previewImage;
+exports.pxTransform = pxTransform;
 exports.readBLECharacteristicValue = readBLECharacteristicValue;
 exports.removeSavedFile = removeSavedFile;
 exports.removeStorage = removeStorage;
 exports.removeStorageSync = removeStorageSync;
 exports.removeTabBarBadge = removeTabBarBadge;
+exports.render = render;
 exports.reportAnalytics = reportAnalytics;
 exports.request = request;
 exports.requestPayment = requestPayment;
 exports.requestPolymerPayment = requestPolymerPayment;
+exports.requirePlugin = requirePlugin;
 exports.saveFile = saveFile;
 exports.saveImageToPhotosAlbum = saveImageToPhotosAlbum;
 exports.saveVideoToPhotosAlbum = saveVideoToPhotosAlbum;
@@ -11138,6 +11760,12 @@ exports.textReview = textReview;
 exports.textToAudio = textToAudio;
 exports.updateShareMenu = updateShareMenu;
 exports.uploadFile = uploadFile;
+exports.useDidHide = useDidHide;
+exports.useDidShow = useDidShow;
+exports.usePageScroll = usePageScroll;
+exports.usePullDownRefresh = usePullDownRefresh;
+exports.useReachBottom = useReachBottom;
+exports.useRouter = useRouter;
 exports.vibrateLong = vibrateLong;
 exports.vibrateShort = vibrateShort;
 exports.writeBLECharacteristicValue = writeBLECharacteristicValue;

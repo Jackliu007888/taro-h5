@@ -50,9 +50,9 @@ const variesConfig = [{
   },
   plugins: exportNameOnly()
 }, {
-  input: 'src/index.js',
+  input: 'src/index.cjs.js',
   output: {
-    file: 'dist/index.js'
+    file: 'dist/index.cjs.js'
   }
 }]
 
@@ -65,5 +65,6 @@ export default variesConfig.map(v => {
       return mergeWith({}, objValue, srcValue, customizer)
     }
   }
+  console.log(v)
   return mergeWith({}, baseConfig, v, customizer)
 })
