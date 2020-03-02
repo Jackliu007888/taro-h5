@@ -40,11 +40,6 @@ class LocationChooser extends Taro.Component {
   render () {
     return Nerv.createPortal(
       <div className='taro_chooselocation' ref={this.getWrapRef}>
-        <div className='taro_chooselocation_bar'>
-          <div className='taro_chooselocation_back' onClick={this.onBack} />
-          <p className='taro_chooselocation_title'>位置</p>
-          <button className='taro_chooselocation_submit' onClick={this.onSubmit}>完成</button>
-        </div>
         <iframe className='taro_chooselocation_frame' frameborder='0' src={`https://apis.map.qq.com/tools/locpicker?search=1&type=1&key=${LOCATION_APIKEY}&referer=myapp`} />
       </div>,
       document.body
@@ -131,6 +126,23 @@ const chooseLocation = ({ success, fail, complete } = {}) => {
       choosenLocation.address = loc.poiaddress
       choosenLocation.latitude = loc.latlng.lat
       choosenLocation.longitude = loc.latlng.lng
+
+      if (choosenLocation.latitude && choosenLocation.longitude) {
+        onSuccess({
+          errMsg: 'chooseLocation:ok',
+          ...choosenLocation
+        })
+      } else {
+        onError({
+          errMsg: 'chooseLocation:fail'
+        })
+      }
+
+      locationChooser.hide()
+      window.removeEventListener('message', onMessage, false)
+      setTimeout(() => {
+        Nerv.unmountComponentAtNode(div)
+      }, 300)
     }
     window.addEventListener('message', onMessage, false)
     locationChooser.show()
