@@ -122,7 +122,7 @@ const chooseLocation = ({ success, fail, complete } = {}) => {
       // 防止其他应用也会向该页面post信息，需判断module是否为'locationPicker'
       if (!loc || loc.module !== 'locationPicker') return
 
-      choosenLocation.name = loc.poiname
+      choosenLocation.name = loc.poiname === '我的位置' ? loc.poiaddress : loc.poiname
       choosenLocation.address = loc.poiaddress
       choosenLocation.latitude = loc.latlng.lat
       choosenLocation.longitude = loc.latlng.lng
